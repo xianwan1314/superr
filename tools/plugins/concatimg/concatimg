@@ -1,0 +1,180 @@
+#!/usr/bin/env python3
+
+# Concatenate img files and fix geometry.
+# by SuperR. @XDA
+
+import glob
+import re
+import io
+import os
+import sys
+import ext4
+
+def main(j, plugin):
+	def banner():
+		j.clears()
+		print()
+		print('-'.center(j.tsize, '-'))
+		print(j.intro1+"Concatimg".center(j.tsize)+color['n'])
+		print(j.intro2+'by SuperR'.center(j.tsize)+color['n'])
+		print('-'.center(j.tsize, '-'))
+		print()
+
+	def atoi(text):
+		return int(text) if text.isdigit() else text
+
+	def natural_keys(text):
+		return [ atoi(c) for c in re.split('(\d+)', text) ]
+
+	plugdir = j.tools+os.sep+'plugins'+os.sep+plugin
+	color = j.color
+
+	if j.platf == 'win':
+		import colorama
+		colorama.init()
+
+	try:
+		import xml.etree.ElementTree as et
+	except ImportError:
+		banner()
+		print(color['r']+'This plugin requires kitchen v3.1.7.3+\n'+color['n'])
+		input('Press ENTER to return to the kitchen')
+		return
+
+	with j.cd(j.rd):
+		if not j.findf('*_1*.img'):
+			updatezip = j.findf('*.zip')
+			foundimg = None
+			banner()
+			if updatezip:
+				updatezip = updatezip[0]
+				apppath = j.greps(j.fl('.*_[1-9]\d*\.img$', '.*userdata|.*persist'), j.zipl(updatezip))
+
+				if apppath:
+					print(color['b']+'Extracting '+updatezip+' ...'+color['n'])
+					for i in apppath:
+						j.zipef(updatezip, i)
+
+					apppath = j.greps(j.fl('.*rawprogram0.*\.xml|.*boot\.img$', '.*\.bak$'), j.zipl(updatezip))
+					for i in apppath:
+						j.zipef(updatezip, i)
+				else:
+					print(color['r']+'There are no partition_*.img files in:\n'+updatezip+color['n']+'\n')
+					input('Press ENTER to return to the kitchen')
+					return
+			else:
+				print(color['r']+'There is nothing to extract or concatenate\n'+color['n'])
+				input('Press ENTER to return to the kitchen')
+				return
+
+		if not j.findf('*_1*.img'):
+			banner()
+			print(color['r']+'There are no _*.img files to concatenate\n'+color['n'])
+			input('Press ENTER to return to the kitchen')
+			return
+
+		finalparts = []
+		rawprog = j.greps('rawprogram_unsparse.xml', glob.glob('*rawprogram*.xml'))
+		if not rawprog: rawprog = glob.glob('*rawprogram*.xml')
+		norawprog = 0
+
+		for p in j.findf('*_1.*img'):
+			partition = '_'.join(p.split('_')[:-1])
+
+			print(partition)
+
+			if glob.glob(partition+'.img'):
+				banner()
+				print(color['r']+partition+'.img already exists in this dirctory.\n'+color['n'])
+				input('Press ENTER to return to the kitchen')
+				return
+
+			chunk = 16384
+
+			finalparts.append(partition)
+
+			imglist = sorted(glob.glob(partition+'_*'), key=natural_keys)
+			if partition == 'system':
+				imglist = j.grepv('system_other.*', imglist)
+
+			banner()
+
+			if rawprog:
+				with open(partition+'.img', 'wb') as o:
+					xml = et.parse(rawprog[0])
+					for e in xml.findall('program'):
+						if partition == '_'.join(e.attrib['filename'].split('_')[:-1]):
+							print(color['b']+'writing '+e.attrib['filename']+' ...'+color['n'])
+
+							if e.attrib['filename'] == partition+'_1.img' or e.attrib['filename'] == partition+'_1.raw.img':
+								pstart = int(e.attrib['start_sector'])
+
+							seek = int(e.attrib['SECTOR_SIZE_IN_BYTES']) * (int(e.attrib['start_sector']) - pstart)
+
+							o.seek(seek)
+							with open(e.attrib['filename'], 'rb') as f:
+								while True:
+									output = f.read(chunk)
+									if not output:
+										break
+									devnull = o.write(output)
+
+							j.delpath(e.attrib['filename'])
+			else:
+				if norawprog == 0:
+					banner()
+					print(color['r']+'No rawprogram*.xml found.'+color['n'])
+					print('Would you like to continue anyway?  y/n')
+					reply = j.getChar()
+					if reply != 'y':
+						return
+
+				norawprog = 1
+				with open(partition+'.img', 'wb') as o:
+					for i in imglist:
+						print(color['b']+'writing '+i+' ...'+color['n'])
+
+						with open(i, 'rb') as f:
+							while True:
+								output = f.read(chunk)
+								if not output:
+									break
+								devnull = o.write(output)
+
+			# j.delpath(*imglist)
+
+			if not glob.glob(partition+'.img'):
+				continue
+
+			print(color['b']+'Checking: '+partition+'.img ...'+color['n'])
+
+			volume_file = open(partition+'.img', 'r+b')
+			volume = ext4.Volume(volume_file, ignore_flags=True)
+
+			stored_block_count = int(volume.superblock.s_blocks_count)
+
+			volume_file.seek(0, io.SEEK_END)
+			volume_size = volume_file.tell()
+
+			real_block_count = int(volume_size / volume.block_size)
+
+			if stored_block_count > real_block_count:
+				print(color['b']+'Fixing: '+partition+'.img ...'+color['n'])
+
+				volume_file.truncate(stored_block_count * volume.block_size)
+
+			volume_file.close()
+
+		if rawprog:
+			j.delpath(*rawprog)
+
+		banner()
+
+		for i in finalparts:
+			if not j.existf(i+'.img'):
+				print(color['r']+'There is no '+i+'.img file\n'+color['n'])
+			else:
+				print(color['g']+i+'.img ready'+color['n'])
+
+		input('\nPress ENTER to return to the kitchen')
+		return

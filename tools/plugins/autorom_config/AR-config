@@ -1,0 +1,120 @@
+# USER CONFIG FOR SUPERR'S KITCHEN AUTOROM
+
+# Which perm type would you like to use?
+# ACCEPTABLE VALUES:
+## "1" (set_metadta)
+## "2" (set_perm)
+## "3" (sparse_dat)
+## "4" (raw_img)
+perm_type = "#aperm"
+
+# Do you want to extract and include the vendor/oem.img in your rom (make sure it exists first)?
+# ACCEPTABLE VALUES:
+## "true"
+## "" (Leave blank to skip vendor.img)
+vendor_img = "#avend"
+
+# Do you want to extract and include the cache.img in your rom (make sure it exists first)?
+# ACCEPTABLE VALUES:
+## "true"
+## "" (Leave blank to skip cache.img)
+cache_img = "#acache"
+
+# Do you want to extract extra partitions (Samsung ONLY)?
+# ACCEPTABLE VALUES:
+## "true"
+## "" (Leave blank to skip cache.img)
+extra_parts = "#aextra"
+
+# What ROM name should be displayed in the updater-script (this is also the zip name) ?
+# ACCEPTABLE VALUES:
+## anything you want (no " or ' allowed)
+rom_name = "#aname"
+
+# What is your custom signature?
+# ACCEPTABLE VALUES:
+## anything you want displayed after the ROM name above in your updater-script (no " or ' allowed).
+cust_sig = "#acsig"
+
+# What method should we use for deodexing?
+# ACCEPTABLE VALUES:
+## "old" (KitKat and below)
+## "l" (Lollipop)
+## "m" (Marshmallow using oat2dex)
+## "m2" (Marshmallow using smali/baksmali)
+## "n2" (Nougat/O using smali/baksmali)
+## "o" (Oreo using vdexExtractor)
+## "skip" (Skip deodex in this setup)
+deodex_type = "#adeo"
+
+# What oat2dex version would you like to use? (only used if m is chosen above)
+# ACCEPTABLE VALUES:
+## "1" (official oat2dex v0.86)
+## "2" (latest commit built from source)
+oat2dex_ver = "#aoat"
+
+# Would you like to delete the framework directories (arm, arm64, etc) after deodexing? (only used if o is chosen above)
+# ACCEPTABLE VALUES:
+## "yes"
+## "no"
+delete_arch = "#adelarch"
+
+# Would you like to root the ROM?
+# ACCEPTABLE VALUES:
+## "1" (SuperSU)
+## "2" (Magisk)
+## "3" (Other)
+## "" (Leave blank to skip rooting)
+root_add = "#aroot"
+
+# What type of SuperSU install would you like?
+# ACCEPTABLE VALUES:
+# NOTE: You must choose SuperSU above to use this option
+## "1" (Let SuperSU decide the best way to root)
+## "2" (System install (SYSTEMLESS=false))
+ss_type = "#astype"
+
+# Would you like to add su.d support to the ROM?
+# NOTE: You must add root above for su.d to work
+# ACCEPTABLE VALUES:
+## "true"
+## "" (Leave blank to skip su.d support)
+sud_add = "#asud"
+
+# Would you like to add Busybox to the ROM?
+# ACCEPTABLE VALUES:
+## "true"
+## "" (Leave blank to skip adding Busybox)
+busybox_add = "#abusy"
+
+# Would you like to remove dm-verity?
+# ACCEPTABLE VALUES:
+## "true"
+## "" (Leave blank to skip removing dm-verity)
+verity_rem = "#averity"
+
+# Would you like to remove forceencrypt?
+# ACCEPTABLE VALUES:
+## "true"
+## "" (Leave blank to skip removing forceencrypt)
+force_rem = "#aforce"
+
+# Would you like build the ROM?
+# ACCEPTABLE VALUES:
+## "true"
+## "" (Leave blank to skip building ROM)
+build_rom = "#abuild"
+
+# Would you like to convert updater-script to update-binary?
+# NOTE: You must build_rom above for converting to work
+# ACCEPTABLE VALUES:
+## "true"
+## "" (Leave blank to skip converting)
+conv_bin = "#abinary"
+
+# Would you like sign the zip?
+# NOTE: You must build_rom above for signing to work
+# ACCEPTABLE VALUES:
+## "true"
+## "" (Leave blank to skip signing)
+sign_zip = "#asign"

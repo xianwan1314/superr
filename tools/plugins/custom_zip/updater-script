@@ -1,0 +1,26 @@
+show_progress(1.000000, 0);
+ui_print(" ");
+ui_print(" ");
+ui_print("#SIGNATURE Installer");
+ui_print("#SIGCUST");
+ui_print(" ");
+ui_print(" ");
+ui_print(" ");
+ui_print(" ");
+ui_print("Checking config ...");
+ui_print(" ");
+package_extract_dir("install", "/tmp/install");
+set_metadata_recursive("/tmp/install", "uid", 0, "gid", 0, "dmode", 0755, "fmode", 0644);
+set_metadata_recursive("/tmp/install/bin", "uid", 0, "gid", 0, "dmode", 0755, "fmode", 0755);
+run_program("/tmp/install/bin/busybox", "sh", "/tmp/install/bin/configure.sh");
+ifelse(file_getprop("/tmp/config", "fail"), abort("ERROR: Partition paths not found."));
+#UNMOUNT
+#MOUNT
+set_progress(0.100000);
+#EXTRACT
+set_progress(0.500000);
+#PERM
+set_progress(0.700000);
+#UNMOUNT
+set_progress(1.000000);
+ui_print("#SIGNATURE Installed");

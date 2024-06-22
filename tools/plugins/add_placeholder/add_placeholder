@@ -1,0 +1,66 @@
+#!/usr/bin/env python3
+
+# Constant variables. DO NOT EDIT unless you know what you are doing
+import os, sys
+
+def main(j, plugin):
+	def banner():
+		j.clears()
+		print()
+		print('-'.center(j.tsize, '-'))
+		print(j.intro1+"Add Placeholder".center(j.tsize)+j.color['n'])
+		print(j.intro2+'by SuperR'.center(j.tsize)+j.color['n'])
+		print('-'.center(j.tsize, '-'))
+		print()
+
+	if os.name == 'nt':
+		import colorama
+		colorama.init()
+
+	romdir2 = j.rd.replace(os.sep, '/')
+	plugdir = j.tools+os.sep+'plugins'+os.sep+plugin
+	# END Constant variables
+
+	# START Script here
+	if not j.sar():
+		banner()
+		j.kprint('This plugin is only for system-as-root devices.\n', 'r')
+		input(j.lang['enter_continue'])
+		return
+
+	banner()
+	j.kprint('Would you like to add .placeholder files in the empty /system root')
+	j.kprint('directories (does not include system/system directories)?  y/n')
+	reply = j.getChar()
+	if reply != 'y':
+		banner()
+		j.kprint('Would you like to remove .placeholder files?  y/n')
+		reply = j.getChar()
+		if reply != 'y':
+			return
+
+		for i in j.grepv('system/system', j.findr(romdir2+'/system/**/.placeholder')):
+			j.kprint('Deleting '+i.replace(romdir2, ''), 'y')
+			j.delpath(i)
+
+		j.kprint('Complete\n', 'g')
+		input(j.lang['enter_continue'])
+		return
+
+	banner()
+	empty = 0
+	for i in j.grepv('system/system', j.findr(romdir2+'/system/**/')):
+		if j.findf(i+'*') or j.findf(i+'.*'):
+			continue
+
+		empty += 1
+		j.kprint('Creating '+i.replace(romdir2, '')+'.placeholder', 'y')
+		j.touch(i+'.placeholder')
+
+	if empty != 0:
+		j.kprint('Complete\n', 'g')
+	else:
+		j.kprint('There are no empty directories in your project.\n', 'r')
+	
+	input(j.lang['enter_continue'])
+	return

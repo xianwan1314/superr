@@ -1,0 +1,913 @@
+#!/usr/bin/env python3
+
+# Constant variables. DO NOT EDIT unless you know what you are doing
+import os, sys
+
+def main(j, plugin):
+	def banner():
+		j.clears()
+		print()
+		print('-'.center(j.tsize, '-'))
+		print(j.intro1+"Apktools".center(j.tsize)+color['n'])
+		print(j.intro2+'by SuperR'.center(j.tsize)+color['n'])
+		print('-'.center(j.tsize, '-'))
+		print()
+
+	plugdir = j.tools+os.sep+'plugins'+os.sep+plugin
+	color = j.color
+	
+	if os.name == 'nt':
+		import colorama
+		colorama.init()
+		apktool = plugdir+'/tools/apktool.bat'
+	else:
+		apktool = plugdir+'/tools/apktool'
+		j.cmd('chmod a+x '+apktool)
+	# END Constant variables
+
+	# START Script here
+	def get_heapsize():
+		if j.getconf('heapsize'):
+			return j.getconf('heapsize')
+		else:
+			return str(j.virtual_memory() - 500)
+	
+	def dlapktool():
+		if not j.existf(plugdir+'/tools/apktool.jar'):
+			banner()
+			j.kprint('Finding apktool.jar ...', 'b')
+			with j.cd(plugdir+'/tools'):
+				dlurl = 'https://bitbucket.org/iBotPeaches/apktool/downloads/'
+				page = j.internet(dlurl, 1).splitlines()
+				page2 = []
+				for i in j.greps('.*href.*\.jar', page):
+					i = j.basename(i.split('"')[1])
+					page2.append(i)
+				newjar = sorted(page2)[-1]
+				j.kprint('Downloading '+newjar+' ...', 'b')
+				j.dlfile(dlurl+newjar, 'apktool.jar')
+	
+	def install_frame():
+		j.mkdir('framework')
+		frame = [sysdir+'/framework/framework-res.apk']+j.greps(j.fl('','.*framework-res\.apk'), j.findr(sysdir+'/framework/**/*.apk'))+[sysdir+'/priv-app/SystemUI.apk', sysdir+'/app/SystemUI.apk', sysdir+'/priv-app/SystemUI/SystemUI.apk', sysdir+'/app/SystemUI/SystemUI.apk']
+		
+		for i in frame:
+			if j.existf(i):
+				j.cmd(apktool+' if -p framework '+i)
+
+	def apk_comp():
+		dlapktool()
+
+		with j.cd(j.rd+'/apkwork'):
+			banner()
+			j.kprint('Compiling '+apkfile+' ...', 'b')
+			if apkfile.endswith('.jar'):
+				apkdir = apkfile+'.out'
+			else:
+				apkdir = '.'.join(apkfile.split('.')[:-1])
+
+			complog = j.cmd(apktool+' b -p framework '+apkdir)
+
+			if not j.existf(apkdir+'/dist/'+apkfile):
+				j.delpath(apkdir+'/dist', apkdir+'/build')
+
+				banner()
+				j.kprint('There was a problem compiling '+apkfile+'\n', 'r')
+				print('Would you like to see the output?  y/n')
+				reply = j.getChar()
+				if reply == 'y':
+					j.clears()
+					print(complog+'\n')
+				
+					input('Press ENTER to continue')
+
+				return
+
+			if not j.existf(apkfile+'.orig'):
+				j.mkdir(j.prfiles+'/apk_orig/'+apkdir)
+				j.cp(apkfile, j.prfiles+'/apk_orig/'+apkdir+'/'+apkfile+'.'+str(j.randm()))
+
+			choice = ''
+			while not choice:
+				banner()
+				print('Choose your signing method:')
+				print()
+				print('1) Use signapk.jar')
+				print('2) Copy new classes.dex and resources.arsc to original apk')
+				print('3) Copy META-INF from orginal apk to new apk')
+				print()
+				print('Type your choice and press ENTER:  ')
+				choice = j.getChar()
+
+				banner()
+				j.kprint('Signing '+apkfile+' ...', 'b')
+				if choice < '1' or choice > '3':
+					choice = ''
+					continue
+				if choice == '1': # START Use signapk.jar
+					os.replace(apkfile, apkfile+'.orig')
+					j.cp(apkdir+'/dist/'+apkfile, apkfile)
+					tester = j.cmd('java -jar '+j.tools+os.sep+'signapk'+os.sep+'signapk.jar -w '+j.tools+os.sep+'signapk'+os.sep+'testkey.x509.pem '+j.tools+os.sep+'signapk'+os.sep+'testkey.pk8 '+apkfile+' '+apkdir+'-new.apk')
+					print(tester)
+					os.replace(apkdir+'-new.apk', apkfile)
+				elif choice == '2': # START Copy new classes.dex and resources.arsc to original apk
+					j.cp(apkdir+'/dist/'+apkfile, apkdir+'-new.apk')
+					j.cp(apkfile, apkfile+'.orig')
+					j.appendf(j.cmd(j.aapt+' remove '+apkfile+' classes.dex resources.arsc'), j.logs+'/zip.log')
+					j.zipef(apkdir+'-new.apk', 'classes.dex')
+					j.zipef(apkdir+'-new.apk', 'resources.arsc')
+					j.appendf(j.cmd(j.aapt+' add -fk '+apkfile+' classes.dex resources.arsc'), j.logs+'/zip.log')
+					j.delpath(apkdir+'-new.apk', 'classes.dex', 'resources.arsc')
+				elif choice == '3': # START Copy META-INF from orginal apk to new apk
+					os.replace(apkfile, apkfile+'.orig')
+					j.cp(apkdir+'/dist/'+apkfile, apkfile)
+					j.cpdir(apkdir+'/original/META-INF', 'META-INF')
+					for i in j.findf('META-INF/*'):
+						j.appendf(j.cmd(j.aapt+' add -f '+apkfile+' '+i), j.logs+'/zip.log')
+					j.delpath('META-INF')
+
+			banner()
+			j.kprint(apkfile+' has been compiled and is located:', 'g')
+			j.kprint(j.rd+'/apkwork/'+apkfile+'\n', 'y')
+			print('Would you like to move '+apkfile+' back to your rom')
+			print('and delete the working directory?  y/n  ')
+			choice = j.getChar()
+			if choice != 'y':
+				return
+
+			os.replace(apkfile, apkchoose)
+
+		j.delpath(j.rd+'/apkwork')
+
+		banner()
+		j.kprint(apkfile+' has been returned to:\n', 'g')
+		print(apkchoose+'\n', 'y')
+		input('Press ENTER to continue')
+		return
+
+	def apk_decomp():
+		dlapktool()
+
+		apkchoose = ''
+		fail = None
+		while not apkchoose:
+			apkchoose = j.pickfile(j.rd+'/system', [('apk/jar files', '.apk .jar')])
+			if not apkchoose:
+				return
+			elif j.greps(' ', j.basename(apkchoose)):
+				banner()
+				j.kprint('apktools plugin cannot currently handle files with spaces in the name.\n', 'r')
+				input('Press ENTER to try again')
+				apkchoose = None
+				continue
+			elif not apkchoose.endswith('.apk') and not apkchoose.endswith('.jar'):
+				banner()
+				j.kprint('ERROR:', 'yrbbo')
+				j.kprint('You must choose an apk or jar file\n.', 'r')
+				print('Would you like to try again?  y/n')
+				reply = j.getChar()
+				if reply == 'y':
+					apkchoose = ''
+					continue
+				else:
+					return
+
+		j.mkdir(j.rd+'/apkwork')
+		with j.cd(j.rd+'/apkwork'):
+			apkfile = j.basename(apkchoose)
+			banner()
+			j.kprint('Decompiling '+apkfile+' ...', 'b')
+			j.cp(apkchoose, j.rd+'/apkwork/'+apkfile)
+			j.appendf(apkchoose, j.rd+'/apkwork/apkchoose')
+			install_frame()
+			decomplog = j.cmd(apktool+' d -p framework '+apkfile)
+			banner()
+			if apkchoose.endswith('.jar'):
+				apkdir = apkfile+'.out'
+			else:
+				apkdir = '.'.join(apkfile.split('.')[:-1])
+			
+			if j.existd(apkdir+'/original'):
+				j.kprint(apkfile+' has been decompiled. It is located:\n', 'g')
+				j.kprint(j.rd+'/apkwork\n', 'y')
+				print('Would you like to see the output?  y/n')
+				reply = j.getChar()
+				if reply == 'y':
+					j.clears()
+					print(decomplog)
+			else:
+				fail = 1
+				j.kprint('There was a problem decompiling '+apkfile+'\n', 'r')
+				print('Would you like to see the output?  y/n')
+				reply = j.getChar()
+				if reply == 'y':
+					j.clears()
+					print(decomplog)
+
+		if fail:
+			with j.cd(j.rd):
+				j.delpath('apkwork')
+		
+		print()
+		input('Press ENTER to continue')
+		j.clears()
+		return
+
+	def delete_meta_inf():
+		banner()
+		print('Would you like to remove the META-INF directory\nfrom all apk files?  y/n')
+		reply = j.getChar()
+		if reply != 'y': return 1
+		
+		frame = None
+		print('Do you want to remove META-INF from framework apk files?  y/n')
+		reply = j.getChar()
+		if reply == 'y': frame = 1
+
+		banner()
+		with j.cd(j.rd):
+			if frame:
+				apktmp = j.findr('system/**/*.apk')
+			else:
+				apktmp = j.greps(j.fl('', 'system/framework/'), j.findr('system/**/*.apk'))
+
+			for i in apktmp:
+				tmpdel = j.greps('META-INF', j.zipl(i))
+				if tmpdel:
+					j.kprint("Deleting META-INF from "+j.basename(i)+" ...", 'b')
+					j.cmd(j.aapt+' remove '+i+' '+' '.join(tmpdel))
+
+		banner()
+		j.kprint('SUCCESS:', 'gb')
+		j.kprint('META-INF directory removed from apk files\n', 'g')
+		input('Press ENTER to continue')
+	
+	def delete_sec_inf():
+		banner()
+		print('Would you like to remove the SEC-INF directory\nfrom all apk files?  y/n')
+		reply = j.getChar()
+		if reply != 'y': return 1
+		
+		frame = None
+		print('Do you want to remove SEC-INF from framework apk files?  y/n')
+		reply = j.getChar()
+		if reply == 'y': frame = 1
+
+		banner()
+		with j.cd(j.rd):
+			if frame:
+				apktmp = j.findr('system/**/*.apk')
+			else:
+				apktmp = j.greps(j.fl('', 'system/framework/'), j.findr('system/**/*.apk'))
+
+			for i in apktmp:
+				tmpdel = j.greps('SEC-INF', j.zipl(i))
+				if tmpdel:
+					j.kprint("Deleting SEC-INF from "+j.basename(i)+" ...", 'b')
+					j.cmd(j.aapt+' remove '+i+' '+' '.join(tmpdel))
+
+		banner()
+		j.kprint('SUCCESS:', 'gb')
+		j.kprint('SEC-INF directory removed from apk files\n', 'g')
+		input('Press ENTER to continue')
+	
+	def lib_separate_apk():
+		banner()
+		j.kprint('This will extract the lib directory from all\napk files in your project into the apk directory. It\nwill also remove the lib directories from the apk files.', 'y')
+
+		print('\nDo you want to continue?  y/n')
+
+		reply = j.getChar()
+		if reply != 'y':
+			return
+
+		banner()
+		with j.cd(j.rd):
+			for i in j.findr('**/*.apk'):
+				appname = j.basename(i)
+				appdir = j.dirname(i)
+
+				with j.cd(appdir):
+					liblist = j.greps('^lib', j.cmd(j.aapt+' l '+appname).splitlines())
+
+					if liblist:
+						j.kprint('Separating lib from '+i+' ... ', 'b')
+						j.cmd(j.p7z+' x -y '+appname+' lib')
+
+						if j.existd('lib'):
+							archlist = {'armeabi-v7a': 'arm', 'arm64-v8a': 'arm64', 'armeabi': 'del'}
+
+							with j.cd('lib'):
+								for l in list(archlist):
+									if j.existd(l):
+										if archlist[l] == 'del': j.delpath(l)
+										else:
+											try: os.rename(l, archlist[l])
+											except: j.delpath(l)
+
+							j.cmd(j.aapt+' r '+appname+' '+' '.join(liblist))
+
+		j.kprint('\nLibs separated\n', 'g')
+		input('Press ENTER to continue')
+		return
+	
+	def smali_patch():
+		def dopatch(patch):
+			appname = patch['appfile']
+			try:
+				app = j.findr(work+'/**/'+appname)[0]
+			except:
+				logmess1 = '[ERROR] '+appname+' referenced in '+i+' not found'
+				j.kprint(logmess1, 'r')
+				if logs: j.appendf(logmess1, logs)
+
+				return
+			
+			appdir = j.dirname(app)
+
+			logmess1 = 'Patching '+appname+' ...'
+			j.kprint(logmess1, 'b')
+			if logs: j.appendf(logmess1, logs)
+
+			with j.cd(appdir):
+				if not j.existf(app):
+					logmess1 = '[ERROR] '+appname+' not found'
+					j.kprint(logmess1+'\n', 'r')
+					if logs: j.appendf(logmess1, logs)
+					
+					return
+
+				if not j.greps('.*classes\.dex', j.zipl(app)):
+					logmess1 = '[ERROR] You must deodex your ROM before patching'
+					j.kprint(logmess1+'\n', 'r')
+					if logs: j.appendf(logmess1, logs)
+
+					input('Press ENTER to continue')
+					return 1
+				
+				j.zipef(appname, '*classes*.dex')
+
+				if not j.existf('classes.dex'):
+					logmess1 = '[ERROR] Extracting classes from '+appname+' failed'
+					j.kprint(logmess1+'\n', 'r')
+					if logs: j.appendf(logmess1, logs)
+
+					return
+				
+				reassemble = []
+				for c in j.findf('*classes*.dex'):
+					if c == 'classes.dex':
+						outdir = 'smali/smali'
+					else:
+						outdir = 'smali/smali_classes'+c[-5]
+
+					reassemble.append(outdir)
+
+					logmess1 = 'Decompiling '+c+' ...'
+					j.kprint(logmess1, 'b')
+					if logs: j.appendf(logmess1, logs)
+
+					dodisassemble = j.cmd('java -Xmx'+get_heapsize()+'m -jar '+baksmali+' disassemble'+api+' '+c+' -o '+outdir)
+					if dodisassemble:
+						j.kprint('\n'+dodisassemble+'\n', 'y')
+				
+				# input('Press ENTER to continue') # DELETE LATER
+
+				for p in list(patch):
+					if p.startswith('appfile'):
+						continue
+					elif p.startswith('#'):
+						logmess1 = '\\n'.join(str("[DISABLED] "+p[:-1]+" "+patch[p]).split('\n'))
+						j.kprint(logmess1, 'r')
+						if logs:
+							j.appendf(logmess1, logs)
+					elif p.startswith('replaceinall'):
+						orig = patch[p][0]
+						new = patch[p][1]
+
+						didrep = 0
+						for fname in j.findr('smali/**/*.smali'):
+							newfile = j.readf(fname)
+
+							if re.findall(re.escape(orig), newfile):
+								logmess1 = '\\n'.join(str("[INFO] Replacing '"+orig+"' string with '"+new+"' in ["+j.basename(fname)+"]").split('\n'))
+								print(logmess1)
+								if logs: j.appendf(logmess1, logs)
+
+								newfile = re.sub(re.escape(orig), new, newfile)
+								j.delpath(fname)
+								j.appendf(newfile, fname)
+								newfile = j.readf(fname)
+
+								if not re.findall(re.escape(new), newfile):
+									logmess1 = '\\n'.join(str("[ERROR] Replacing '"+orig+"' string with '"+new+"' in ["+j.basename(x)+"]").split('\n'))
+									j.kprint(logmess1, 'r')
+									if logs: j.appendf(logmess1, logs)
+								else:
+									didrep += 1
+						
+						if didrep == 0:
+							logmess1 = '\\n'.join(str("[SKIPPED] "+p[:-1]+" '"+patch[p][0]+"' '"+patch[p][1]+"'").split('\n'))
+							j.kprint(logmess1, 'y')
+							if logs: j.appendf(logmess1, logs)
+					elif p.startswith('replaceinfile'):
+						fname = 'smali/'+patch[p][0]
+						if not j.existf(fname):
+							logmess1 = '[ERROR] Smali file not found:\n'+fname
+							j.kprint(logmess1, 'r')
+							if logs: j.appendf(logmess1, logs)
+							continue
+
+						newfile = j.readf(fname)
+						orig = patch[p][1]
+						new = patch[p][2]
+
+						if re.findall(re.escape(orig), newfile):
+							logmess1 = '\\n'.join(str("[INFO] Replacing '"+orig+"' string with '"+new+"' in ["+j.basename(fname)+"]").split('\n'))
+							print(logmess1)
+							if logs: j.appendf(logmess1, logs)
+							
+							newfile = re.sub(re.escape(orig), new, newfile)
+							j.delpath(fname)
+							j.appendf(newfile, fname)
+							newfile = j.readf(fname)
+
+							if not re.findall(re.escape(new), newfile):
+								logmess1 = '\\n'.join(str("[ERROR] Replacing '"+orig+"' string with '"+new+"' in ["+j.basename(fname)+"]").split('\n'))
+								j.kprint(logmess1, 'r')
+								if logs: j.appendf(logmess1, logs)
+						else:
+							logmess1 = '\\n'.join(str("[SKIPPED] "+p[:-1]+" '"+patch[p][0]+"' '"+patch[p][1]+"' '"+patch[p][2]+"'").split('\n'))
+							j.kprint(logmess1, 'y')
+							if logs: j.appendf(logmess1, logs)
+					elif p.startswith('replaceindir'):
+						dname = 'smali/'+patch[p][0]
+						if not j.existd(dname):
+							logmess1 = '[ERROR] Directory not found:\n'+dname
+							j.kprint(logmess1, 'r')
+							if logs: j.appendf(logmess1, logs)
+
+							continue
+
+						orig = patch[p][1]
+						new = patch[p][2]
+
+						with j.cd(dname):
+							didrep = 0
+							for fname in j.findr('**/*.smali'):
+								newfile = j.readf(fname)
+
+								if re.findall(re.escape(orig), newfile):
+									logmess1 = '\\n'.join(str("[INFO] Replacing '"+orig+"' string with '"+new+"' in ["+j.basename(fname)+"]").split('\n'))
+									print(logmess1)
+									if logs: j.appendf(logmess1, logs)
+									
+									newfile = newfile.replace(orig, new)
+									j.delpath(fname)
+									j.appendf(newfile, fname)
+									newfile = j.readf(fname)
+
+									if not re.findall(re.escape(new), newfile):
+										logmess1 = '\\n'.join(str("[ERROR] Replacing '"+orig+"' string with '"+new+"' in ["+j.basename(fname)+"]").split('\n'))
+										j.kprint(logmess1, 'r')
+										if logs: j.appendf(logmess1, logs)
+									else:
+										didrep += 1
+						if didrep == 0:
+							logmess1 = '\\n'.join(str("[SKIPPED] "+p[:-1]+" '"+patch[p][0]+"' '"+patch[p][1]+"' '"+patch[p][2]+"'").split('\n'))
+							j.kprint(logmess1, 'y')
+							if logs: j.appendf(logmess1, logs)
+					elif p.startswith('replaceinsearch'):
+						word = patch[p][0]
+						orig = patch[p][1]
+						new = patch[p][2]
+
+						didrep = 0
+						for fname in j.findr('smali/**/*.smali'):
+							newfile = j.readf(fname)
+
+							if not re.findall(re.escape(word), newfile):
+								continue
+
+							if re.findall(re.escape(orig), newfile):
+								logmess1 = '\\n'.join(str("[INFO] Replacing '"+orig+"' string with '"+new+"' in ["+j.basename(fname)+"]").split('\n'))
+								print(logmess1)
+								if logs: j.appendf(logmess1, logs)
+
+								newfile = re.sub(re.escape(orig), new, newfile)
+								j.delpath(fname)
+								j.appendf(newfile, fname)
+								newfile = j.readf(fname)
+
+								if not re.findall(re.escape(new), newfile):
+									logmess1 = '\\n'.join(str("[ERROR] Replacing '"+orig+"' string with '"+new+"' in ["+j.basename(x)+"]").split('\n'))
+									j.kprint(logmess1, 'r')
+									if logs: j.appendf(logmess1, logs)
+								else:
+									didrep += 1
+						if didrep == 0:
+							logmess1 = '\\n'.join(str("[SKIPPED] "+p[:-1]+" '"+patch[p][0]+"' '"+patch[p][1]+"' '"+patch[p][2]+"'").split('\n'))
+							j.kprint(logmess1, 'y')
+							if logs: j.appendf(logmess1, logs)
+					elif p.startswith('methodreplace'):
+						fname = 'smali/'+patch[p][0]
+						if not j.existf(fname):
+							logmess1 = '[ERROR] Smali file not found:\n'+fname
+							j.kprint(logmess1, 'r')
+							if logs: j.appendf(logmess1, logs)
+
+							continue
+
+						newfile = j.readf(fname)
+						search = patch[p][1]
+						method = patch[p][2]
+
+						if j.existf(patchdir+'/'+method):
+							method = j.readfl(patchdir+'/'+method)
+						else:
+							logmess1 = '[ERROR] Method file not found:\n'+method
+							j.kprint(logmess1, 'r')
+							if logs: j.appendf(logmess1, logs)
+
+							continue
+		
+						method2 = j.grepb(search, '.end method', newfile.splitlines(), 1)
+
+						if re.findall(re.escape(search), newfile) and method2 != method:
+							logmess1 = '\\n'.join(str("[INFO] Replacing '"+search+"' method in ["+j.basename(fname)+"]").split('\n'))
+							print(logmess1)
+							if logs: j.appendf(logmess1, logs)
+							
+							go = None
+							newsmali = []
+							for line in j.readfl(fname):
+								if search in line or go:
+									if line == '.end method':
+										go = None
+										newsmali += method
+									else:
+										go = 1
+									continue
+								
+								newsmali.append(line)
+							
+							j.delpath(fname)
+							j.appendf('\n'.join(newsmali), fname)
+							
+							if j.grepb(search, '.end method', j.readfl(fname), 1) != method:
+								logmess1 = '\\n'.join(str("[ERROR] Replacing '"+search+"' method in ["+j.basename(fname)+"]").split('\n'))
+								j.kprint(logmess1, 'r')
+								if logs: j.appendf(logmess1, logs)
+						else:
+							logmess1 = '\\n'.join(str("[SKIPPED] "+p[:-1]+" '"+patch[p][0]+"' '"+patch[p][1]+"' '"+patch[p][2]+"'").split('\n'))
+							j.kprint(logmess1, 'y')
+							if logs: j.appendf(logmess1, logs)
+					elif p.startswith('addmethod'):
+						fname = 'smali/'+patch[p][0]
+						if not j.existf(fname):
+							logmess1 = '[ERROR] Smali file not found:\n'+fname
+							j.kprint(logmess1, 'r')
+							if logs: j.appendf(logmess1, logs)
+
+							continue
+
+						method = patch[p][1]
+
+						if j.existf(patchdir+'/'+method):
+							method = j.readfl(patchdir+'/'+method)
+						else:
+							logmess1 = '[ERROR] Method file not found:\n'+method
+							j.kprint(logmess1, 'r')
+							if logs: j.appendf(logmess1, logs)
+
+							continue
+
+						search = method[0]
+
+						if not re.findall(re.escape(search), j.readf(fname)):
+							logmess1 = '\\n'.join(str("[INFO] Adding '"+search+"' method in ["+j.basename(fname)+"]").split('\n'))
+							print(logmess1)
+							if logs: j.appendf(logmess1, logs)
+
+							j.appendf('\n'+'\n'.join(method), fname)
+
+							if j.grepb(search, '.end method', j.readfl(fname), 1) != method:
+								logmess1 = '\\n'.join(str("[ERROR] Adding '"+search+"' method in ["+j.basename(fname)+"]").split('\n'))
+								j.kprint(logmess1, 'r')
+								if logs: j.appendf(logmess1, logs)
+						else:
+							logmess1 = '\\n'.join(str("[SKIPPED] "+p[:-1]+" '"+patch[p][0]+"' '"+patch[p][1]+"'").split('\n'))
+							j.kprint(logmess1, 'y')
+							if logs: j.appendf(logmess1, logs)
+					else:
+						if p:
+							logmess1 = '[MALFORMED PATCH] '+p
+							j.kprint(logmess1, 'r')
+							if logs: j.appendf(logmess1, logs)
+
+				# input('Press ENTER to continue') # DELETE LATER
+				
+				for r in reassemble:
+					if r == 'smali/smali':
+						cfile = 'classes.dex'
+					else:
+						cfile = j.basename(r).split('_')[1]+'.dex'
+
+					j.delpath(cfile)
+					logmess1 = 'Compiling '+cfile+' ...'
+					j.kprint(logmess1, 'b')
+					if logs: j.appendf(logmess1, logs)
+
+					doassemble = j.cmd('java -Xmx'+get_heapsize()+'m -jar '+smali+' assemble'+api+' '+r+' -o '+cfile)
+					if doassemble:
+						j.kprint('\n'+doassemble+'\n', 'y')
+						if logs: j.appendf(doassemble, logs)
+
+				logmess1 = 'Packing classes in '+appname+' ...'
+				j.kprint(logmess1, 'b')
+				if logs: j.appendf(logmess1, logs)
+
+				for d in j.greps('.*classes.*\.dex', j.zipl(appname)):
+					j.cmd(j.aapt+' remove '+appname+' '+d)
+
+				j.cmd(j.aapt+' add -fk '+appname+' classes*.dex')
+				j.delpath('smali', *j.findf('classes*.dex'))
+
+		def convptch(patchfile):
+			curr = j.readfl(patchfile)
+			appname = curr[0].split('<')[1].split('>')[0]
+
+			patch = {}
+			patch['appfile'] = appname
+
+			ria, rif, rid, mr, am, dis, ris = 1, 1, 1, 1, 1, 1, 1
+
+			for i in curr[1:]:
+				if i.startswith('replaceinall'):
+					orig = i.split("'")[1].replace('\\n', '\n')
+					new = i.split("'")[3].replace('\\n', '\n')
+					patch['replaceinall'+str(ria)] = [orig, new]
+					ria += 1
+				elif i.startswith('replaceinfile'):
+					fname = i.split("'")[1]
+					orig = i.split("'")[3].replace('\\n', '\n')
+					new = i.split("'")[5].replace('\\n', '\n')
+					patch['replaceinfile'+str(rif)] = [fname, orig, new]
+					rif += 1
+				elif i.startswith('replaceindir'):
+					dname = i.split("'")[1]
+					orig = i.split("'")[3].replace('\\n', '\n')
+					new = i.split("'")[5].replace('\\n', '\n')
+					patch['replaceindir'+str(rid)] = [dname, orig, new]
+					rid += 1
+				elif i.startswith('replaceinsearch'):
+					word = i.split("'")[1]
+					orig = i.split("'")[3].replace('\\n', '\n')
+					new = i.split("'")[5].replace('\\n', '\n')
+					patch['replaceinsearch'+str(ris)] = [word, orig, new]
+					ris += 1
+				elif i.startswith('methodreplace'):
+					fname = i.split("'")[1]
+					search = i.split("'")[3].replace('\\n', '\n')
+					method = i.split("'")[5]
+					patch['methodreplace'+str(mr)] = [fname, search, method]
+					mr += 1
+				elif i.startswith('addmethod'):
+					fname = i.split("'")[1]
+					method = i.split("'")[3]
+					patch['addmethod'+str(am)] = [fname, method]
+					am += 1
+				elif i.startswith('#'):
+					if i.startswith('##'):
+						continue
+
+					if i.startswith('# '):
+						begin = ' '.join(i.split()[:2])
+					else:
+						begin = i.split()[0]
+
+					end = i[len(begin)+1:]
+
+					patch[begin+str(dis)] = end
+					dis += 1
+
+			return patch
+
+		try:
+			import re, textwrap
+		except ImportError:
+			banner()
+			j.kprint('This feature requires kitchen v3.1.7.3+\n', 'r')
+			input('Press ENTER to continue')
+			return
+		
+		logs = j.rd+'/00_project_files/logs/smali_patch.log'
+		work = j.rd
+		smali, baksmali = None, None
+		
+		banner()
+
+		try:
+			smali = j.findf(j.tools+'/smali/current/smali*')[0]
+			baksmali = j.findf(j.tools+'/smali/current/baksmali*')[0]
+		except:
+			logmess1 = 'Either smali or baksmali was not found. Check tools directory.'
+			j.kprint(logmess1, 'r')
+			if logs: j.appendf(logmess1, logs)
+
+			input('Press ENTER to continue')
+			return
+		
+		api = j.getprop('ro.build.version.sdk')
+		if api:
+			api = ' -a '+api
+		else:
+			api = ''
+
+		with j.cd(j.rd):
+			runit = None
+			if j.existd('smali_patch'):
+				patchdir = j.rd+os.sep+'smali_patch'
+				patches = j.findf(patchdir+'/*.ptch')
+				
+				if patches:
+					runit = 1	
+			else:
+				patches = j.findf(j.rd+'/*.ptch')
+				patchdir = j.rd
+				if patches:
+					runit = 1	
+
+			if runit:
+				for i in patches:
+					if dopatch(convptch(i)) == 1:
+						return
+			else:
+				j.kprint('ERROR:', 'yrbbo')
+				logmess1 = '[ERROR] No patches found.'
+				logmess2 = 'Add .ptch files to the project directory, or in a\nsubdirectory named "smali_patch".'
+				patchformat = textwrap.dedent('''
+					Available Patch Modes:
+
+					  appfile <ExampleApp.apk>
+					  replaceinall 'search string' 'new string'
+					  replaceinfile 'smali/path/to/file' 'search string' 'new string'
+					  replaceindir 'smali/path/to/dir' 'search string' 'new string'
+					  replaceinsearch 'search word' 'search string' 'new string'
+					  methodreplace 'smali/path/to/file' 'search method' 'methods/ExampleApp.m'
+					  addmethod 'smali/path/to/file' 'methods/ExampleApp2.m'
+				''')
+				j.kprint(logmess1[8:]+'\n', 'r')
+				print(logmess2)
+				j.kprint(patchformat, 'y')
+				if logs: j.appendf(logmess1+' '+logmess2.replace('\n', ' '), logs)
+
+				if not j.existf('smali_patch/ExampleApp.ptch'):
+					print('Would you like to add smali_patch/ExampleApp.ptch to your project?  y/n')
+					if j.getChar() == 'y':
+						patchex = textwrap.dedent('''\
+							## INFO:
+
+							## Lines starting with ## are completely ignored
+							## Lines starting with # are disabled patches
+							## Lines starting with a patch mode (listed below) are patches
+							##
+							## search string = The string you want to replace
+							## new string = The new string you want instead of search string
+							## search method = The first line in the method to replace using methodreplace
+							## search word = The string to search for to determine which files to patch in replaceinsearch
+							##
+							## Single quotes (') are used as separators.
+							## No need to escape double quotes (\\").
+							## New line character (\\n) is supported in search string and new string.
+							## method.m file path is relative to the patch directory (either superr_project/, or superr_project/smali_patch/).
+							## smali file path starts after the initial smali directory. If you are patching classes.dex, you would use smali/path/to/file.smali. If you are patching classes2.dex, you would use smali_classes2/path/to/file.smali, etc.
+							
+							## AVAILABLE PATCH MODES:
+							
+							## appfile - Perform patches on "ExampleApp.apk" (do not include path)
+							## replaceinall - Replace "search string" with "new string" in all smali files.
+							## replaceinfile - Replace "search string" with "new string" in specific smali file.
+							## replaceindir - Replace "search string" with "new string" in all smali files in a specific directory.
+							## replaceinsearch - Replace "search string" with "new string" in all smali files that contain "search word".
+							## methodreplace - Replace "search method" with the contents of "methods/ExampleApp.m" in a specific smali file.
+							## addmethod - Add the method from "methods/ExampleApp2.m" to a specific smali file.
+							
+							## EXAMPLE PATCHES:
+							
+							# appfile <ExampleApp.apk>
+							# replaceinall 'search string' 'new string'
+							# replaceinfile 'smali/path/to/file.smali' 'search string' 'new string'
+							# replaceindir 'smali/path/to/dir' 'search string' 'new string'
+							# replaceinsearch 'search word' 'search string' 'new string'
+							# methodreplace 'smali/path/to/file.smali' 'search method' 'methods/ExampleApp.m'
+							# addmethod 'smali/path/to/file.smali' 'methods/ExampleApp2.m'\
+						''')
+						methodex = textwrap.dedent('''\
+							.method This is a FULL method
+
+							.end method\
+						''')
+						j.mkdir('smali_patch/methods')
+						j.appendf(patchex, 'smali_patch/ExampleApp.ptch')
+						j.appendf(methodex, 'smali_patch/methods/ExampleApp.m')
+						j.appendf(methodex, 'smali_patch/methods/ExampleApp2.m')
+
+						banner()
+						logmess1 = 'smali_patch/ExampleApp.ptch has been added.'
+						j.kprint(logmess1+'\n', 'g')
+						if logs: j.appendf(logmess1, logs)
+
+						input('Press ENTER to continue')
+
+				return
+
+		banner()
+		logmess1 = 'Patch complete.'
+		j.kprint(logmess1+'\n', 'g')
+		if logs: j.appendf(logmess1, logs)
+
+		input('Press ENTER to continue')
+		return
+
+	if j.existf(j.rd+'/system/system/build.prop'):
+		sysdir = j.rd+'/system/system'
+	else:
+		sysdir = j.rd+'/system'
+
+	while True:
+		banner()
+		j.kprint('What would you like to do?\n', 'gb')
+		if not j.existd(j.rd+'/apkwork'):
+			print('1) Decompile an apk/jar')
+		else:
+			apkchoose = j.readf(j.rd+'/apkwork/apkchoose')
+			apkfile = j.basename(apkchoose)
+			j.kprint('1) Compile '+color['y']+apkfile)
+		
+		print('2) Patch smali using .ptch files')
+		print('3) Delete META-INF from all apk files')
+		print('4) Delete SEC-INF from all apk files')
+		print('5) Separate lib directory from all apk files')
+		print('6) '+j.lang['donate_menu_zipalign'])
+		j.kprint('p = Plugin Manager', 'y')
+		j.kprint('q = Quit', 'm')
+
+		choice = j.getChar()
+		
+		if choice.isnumeric():
+			if choice < '1' or choice > '6':
+				continue
+		elif choice not in ['p', 'q']:
+			continue
+		elif choice == 'p': # START Plugin Manager
+			return
+		elif choice == 'q': # START Quit
+			sys.exit()
+		
+		if choice in ['1', '2']:
+			otest = j.findr(sysdir+'/**/*.odex')+j.findr(j.rd+'/vendor/**/*.odex')+j.findf(sysdir+'/odex.sqsh')+j.findr(sysdir+'/framework/**/boot.oat')
+			
+			if otest:
+				j.appendf('Still odexed:\n'+'\n'.join(otest), j.logs+'/'+plugin+'.log')
+
+				banner()
+				j.kprint('ERROR:', 'yrbbo')
+				j.kprint('Your ROM must be deodexed to de/compile apk/jar files\n.', 'r')
+				input('Press ENTER to continue')
+				continue
+		
+		if choice in ['2', '3', '4', '5']:
+			if not j.existd(j.rd+'/system'):
+				banner()
+				j.kprint('ERROR:', 'yrbbo')
+				j.kprint('No system directory\n', 'r')
+				input(j.lang['enter_continue'])
+				continue
+		
+		if choice == '1':
+			if not j.existd(j.rd+'/apkwork'):
+				apk_decomp()
+			else:
+				apk_comp()
+			continue
+		elif choice == '2':
+			smali_patch()
+			continue
+		elif choice == '3':
+			delete_meta_inf()
+			continue
+		elif choice == '4':
+			delete_sec_inf()
+			continue
+		elif choice == '5':
+			lib_separate_apk()
+			continue
+		elif choice == '6': # START Zipalign apk files
+			j.dozipalign()
+			banner()
+			j.kprint(j.lang['zipalign_complete']+'\n', 'g')
+			input(j.lang['enter_continue'])
+			continue
+
+	return

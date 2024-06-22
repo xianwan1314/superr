@@ -1,0 +1,198 @@
+#!/usr/bin/env python3
+
+# Constant variables. DO NOT EDIT unless you know what you are doing
+import os, sys
+
+def main(j, plugin):
+	def banner():
+		j.clears()
+		print()
+		print('-'.center(j.tsize, '-'))
+		print(j.intro1+"Mods Installer".center(j.tsize)+color['n'])
+		print(j.intro2+'by SuperR'.center(j.tsize)+color['n'])
+		print('-'.center(j.tsize, '-'))
+		print()
+
+	plugdir = j.tools+os.sep+'plugins'+os.sep+plugin
+	color = j.color
+
+	if j.platf == 'win':
+		import colorama
+		colorama.init()
+	# END Constant variables
+
+	# START Script here
+	def addmod():
+		if not j.existd(plugdir+'/mod_zips'):
+			j.mkdir(plugdir+'/mod_zips')
+
+		with j.cd(plugdir+os.sep+'mod_zips'):
+			findmod = sorted(j.findf('*.zip'))
+
+		if not findmod:
+			filename = j.pickfile(j.rd, [('zip files', '.zip')])
+			if not filename:
+				banner()
+				print(color['rb']+color['y']+color['bo']+'ERROR:'+color['n'])
+				print(color['r']+'Add mod zips to the mod_zips directory')
+				print('in this plugin and try again.'+color['n'])
+				print()
+				input('Press ENTER to continue')
+				return 1
+		else:
+			filename = j.chlist(color['gb']+'Choose mod to install:'+color['n'], findmod, len(findmod), 'plug')
+			if filename == 1:
+				return 1
+			elif filename == 3:
+				sys.exit()
+
+			filename = plugdir+os.sep+'mod_zips'+os.sep+filename
+
+		if runcheck(filename) == 1:
+			return 1
+
+		moddir = None
+		while not moddir:
+			banner()
+			print('Enter the name of your mod directory (no spaces allowed)\n')
+			moddir = input()
+
+			if ' ' in moddir:
+				banner()
+				print(color['r']+'No spaces allowed.\n'+color['n'])
+				print('Try again?  y/n')
+				reply = j.getChar()
+				if reply != 'y': return 1
+				else: moddir = None
+
+			if j.existd(j.rd+'/'+moddir):
+				banner()
+				print(color['r']+moddir+' already exists.\n'+color['n'])
+				print('Try again?  y/n')
+				reply = j.getChar()
+				if reply != 'y': return 1
+				else: moddir = None
+
+		filename1 = j.basename(filename)
+		
+		banner()
+		print(color['b']+'Adding '+filename1+' in '+moddir+' ...'+color['n'])
+
+		with j.cd(j.usdir):
+			j.awkadd('#BUSYBOX', '#MOD # For /tmp/'+moddir, 'before', 'first', 'updater-script')
+
+			j.awkadd('#MOD # For /tmp/'+moddir, j.readf(plugdir+'/files/mods_prog'), 'after', 'first', 'updater-script')
+			j.sedf('#MODINSTALL', filename1, 'updater-script')
+			j.sedf('#MODDIR', moddir, 'updater-script')
+			j.mkdir(j.rd+'/'+moddir)
+			j.cp(filename, j.rd+'/'+moddir+'/'+filename1)
+
+			oldmods = j.getconf('mod_list', j.uconf, l=1)
+			if oldmods:
+				j.getconf('mod_list', j.uconf, add=' '.join(oldmods + [moddir]))
+			else:
+				j.getconf('mod_list', j.uconf, add=moddir)
+
+			return
+
+	def delmod():
+		if not modlist:
+			banner()
+			print(color['rb']+color['y']+color['bo']+'ERROR:'+color['n'])
+			print(color['r']+'There are no mods to remove'+color['n'])
+			print()
+			input('Press ENTER to continue')
+			return
+
+		moddir = j.chlist(color['rb']+'Choose mod to delete:'+color['n'], modlist, len(modlist), 'plug')
+		if moddir == 1:
+			return 1
+		elif moddir == 3:
+			sys.exit()
+
+		banner()
+		print(color['b']+'Removing '+moddir+' ...'+color['n'])
+
+		modlist.remove(moddir)
+		if modlist:
+			j.getconf('mod_list', j.uconf, add=' '.join(modlist))
+		else:
+			j.getconf('mod_list', j.uconf, 'rem')
+
+		j.grepvf('/tmp/'+moddir, j.usdir+'/updater-script')
+
+		j.delpath(j.rd+os.sep+moddir)
+
+		return
+
+	def runcheck(filename):
+		banner()
+		print(color['b']+'Checking mod zip ...'+color['n'])
+		if filename:
+			with j.cd(plugdir):
+				groove = None
+				zipcontents = j.zipl(filename)
+				if j.greps('update-binary', zipcontents):
+					j.zipef(filename, j.greps('update-binary', zipcontents)[0])
+					groove = j.readfl('update-binary')
+
+				if not groove or not groove[0].startswith('#!'):
+					j.delpath('update-binary')
+					banner()
+					print(color['y']+color['rb']+color['bo']+'ERROR:'+color['n'])
+					print(color['r']+'There is a problem with the selected mod. Make sure')
+					print('the zip uses an update-binary script.'+color['n'])
+					print()
+					input('Press ENTER to continue')
+					return 1
+
+				j.delpath('update-binary')
+				return 0
+
+	if not j.grepf('.*Magisk.zip', j.usdir+'/updater-script'):
+		banner()
+		print(color['r']+color['yb']+j.lang['notice']+color['n'])
+		print(color['b']+'Magisk dependent zips need Magisk installed.')
+		print('If your mod does not depend on Magisk,')
+		print('press "y" to continue.'+color['n'])
+		print()
+		print('Would you like to continue?  y/n')
+		reply = j.getChar()
+		if reply != 'y':
+			return
+
+	choice = ''
+	while not choice:
+		modlist = sorted(j.getconf('mod_list', j.uconf, l=1))
+
+		banner()
+		if modlist:
+			print(color['b']+'CURRENT MODS:'+color['n'])
+			for i in modlist:
+				print(color['g']+i+color['n'])
+			print()
+
+		print(color['gb']+'What would you like to do?'+color['n'])
+		print()
+		print('1) Add mod')
+		print('2) Remove mod')
+		print(color['m']+'q = Quit'+color['n'])
+		print()
+		print('Make your selection:')
+		choice = j.getChar()
+
+		if choice < '1' or choice > '2' and choice not in ['q']:
+			choice = ''
+			continue
+		elif choice == 'q':
+			return
+		elif choice == '1':
+			if addmod() == 1:
+				return
+			choice = ''
+			continue
+		elif choice == '2':
+			if delmod() == 1:
+				return
+			choice = ''
+			continue

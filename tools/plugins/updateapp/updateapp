@@ -1,0 +1,156 @@
+#!/usr/bin/env python3
+
+# Constant variables. DO NOT EDIT unless you know what you are doing
+import os, sys
+
+def main(j, plugin):
+	def banner():
+		j.clears()
+		print()
+		print('-'.center(j.tsize, '-'))
+		print(j.intro1+"UPDATE.APP Extract".center(j.tsize)+color['n'])
+		print(j.intro2+'by SuperR'.center(j.tsize)+color['n'])
+		print('-'.center(j.tsize, '-'))
+		print()
+
+	color = j.color
+	plugdir = j.tools+os.sep+'plugins'+os.sep+plugin
+
+	if not plugdir in sys.path:
+		sys.path.insert(0, plugdir)
+	
+	if os.name == 'nt':
+		import colorama
+		colorama.init()
+	# END Constant variables
+
+	# START Script here
+	def findapp():
+		try:
+			ftmp = (j.findf('*.APP') + j.findf('*.app'))[0]
+		except:
+			ftmp = []
+
+		return ftmp
+
+	def perror(merror):
+		banner()
+		print(color['rb']+color['y']+color['bo']+'ERROR:'+color['n'])
+		print(color['r']+merror+color['n'])
+		print()
+		input('Press ENTER to return to the kitchen')
+
+	with j.cd(j.rd):
+		banner()
+		print(color['b']+'Checking files ...'+color['n'])
+		updateapp = findapp()
+		if not updateapp:
+			updatezip = j.findf('*.zip')
+			if updatezip:
+				updatezip = updatezip[0]
+				apppath = j.greps('.*UPDATE\.APP$|.*update\.app$', j.zipl(updatezip))
+				if not apppath:
+					perror('There is no UPDATE.APP in this zip')
+					return
+
+				banner()
+				print(color['b']+'Extracting '+updatezip+' ...'+color['n'])
+
+				for i in apppath:
+					j.zipef(updatezip, i)
+				
+				if j.existf('UPDATE.APP'):
+					updateapp = 'UPDATE.APP'
+				elif j.existf('update.app'):
+					updateapp = 'update.app'
+				else:
+					perror('There was a problem extracting UPDATE.APP')
+					return
+
+			else:
+				perror('There is no file to extract')
+				return
+
+		banner()
+		print(color['b']+'Extracting '+updateapp+' ...'+color['n'])
+		import splituapp
+		splituapp.extract(updateapp, ['super', 'system', 'boot', 'vendor', 'kernel', 'ramdisk', 'version', 'product', 'cust', 'odm'])
+		with j.cd('output'):
+			for i in j.findf('*'):
+				os.replace(i, j.rd+os.sep+i)
+
+		if not j.existf('system.img') and not j.existf('super.img'):
+			j.delpath('output')
+			perror('There is no system.img or super.img')
+			return
+
+		j.delpath('output')
+
+		if j.existf('super_2.img'):
+			banner()
+			print('Would you like to merge super_2.img with super.img?  y/n')
+
+			if j.getChar() == 'y':
+				if j.fsize('super.img') > j.fsize('super_2.img'):
+					large = 1
+				else:
+					large = 2
+					
+				j.sparse_conv('super.img')
+				j.sparse_conv('super_2.img')
+
+				banner()
+				j.kprint('Calculating offsets (may take a while) ...', 'b')
+
+				if large == 2:
+					os.replace('super.img', 'super_1.img')
+					os.replace('super_2.img', 'super.img')
+					os.replace('super_1.img', 'super_2.img')
+
+				def chk_data(data):
+					cnt2 = 0
+					for i in data:
+						if i != 0:
+							return cnt2
+						cnt2 += 1
+
+				chunk = 10000
+				cnt = 0
+				offset = 0
+				filename = 'super_2.img'
+				sizef = os.stat(filename).st_size
+
+				if sizef < chunk:
+					chunk = sizef
+
+				with open(filename, 'rb') as f:
+					while True:
+						data = f.read(chunk)
+						cnt += 1
+
+						if all(c == 0 for c in data):
+							continue
+
+						cntchk = chk_data(data)
+						break
+
+					if cnt == 1:
+						offset = cntchk
+					else:
+						offset = (chunk * (cnt-1)) + cntchk
+
+				banner()
+				j.kprint('Merging ...', 'b')
+				
+				with open(filename, 'rb') as f, open('super.img', 'r+b') as o:
+					f.seek(offset)
+					o.seek(offset)
+					o.write(f.read())
+
+				j.delpath(filename)
+
+	banner()
+	print(color['g']+updateapp+' extraction was successful'+color['n'])
+	print()
+	input('Press ENTER to return to the kitchen')
+	return

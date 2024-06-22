@@ -1,0 +1,230 @@
+#!/usr/bin/env python3
+
+# Constant variables. DO NOT EDIT unless you know what you are doing
+import os, sys, importlib
+from shutil import which
+
+def main(j, plugin):
+	def banner():
+		j.clears()
+		print()
+		print('-'.center(j.tsize, '-'))
+		print(j.intro1+"Xiaomi Patch".center(j.tsize)+color['n'])
+		print(j.intro2+'by SuperR'.center(j.tsize)+color['n'])
+		print('-'.center(j.tsize, '-'))
+		print()
+	
+	plugdir = j.tools+os.sep+'plugins'+os.sep+plugin
+	color = j.color
+
+	if j.platf == 'win':
+		import colorama
+		colorama.init()
+	# END Constant variables
+
+	# START Script here
+	def exitk():
+		input(j.lang['enter_continue'])
+
+	def get_heapsize():
+		if j.getconf('heapsize', j.mconf):
+			return j.getconf('heapsize', j.mconf)
+		else:
+			return str(j.virtual_memory() - 500)
+
+	def mrep(smalif, searchstr, fname):
+		go = None
+		newsmali = []
+		for line in j.readfl(smalif):
+			if searchstr in line or go:
+				if line == '.end method':
+					go = None
+					newsmali = newsmali + fname
+				else:
+					go = 1
+				continue
+			
+			newsmali.append(line)
+		
+		j.delpath(smalif)
+		j.appendf('\n'.join(newsmali), smalif)
+
+	try:
+		smali = j.findf(j.tools+'/smali/current/smali*.jar')[0]
+		baksmali = j.findf(j.tools+'/smali/current/baksmali*.jar')[0]
+	except:
+		print(color['r']+'Could not find either smali or baksmali\n'+color['n'])
+		exitk()
+		return
+	
+	if os.name != 'nt' and not which('python3'):
+		print(color['r']+'You must have python3.5 or higher to use this plugin\n'+color['n'])
+		exitk()
+		return
+
+	if j.existf(j.rd+'/system/build.prop'):
+		sysdir = j.rd+'/system'
+	elif j.existf(j.rd+'/system/system/build.prop'):
+		sysdir = j.rd+'/system/system'
+	else:
+		banner()
+		print(color['r']+'There is no build.prop\n'+color['n'])
+		exitk()
+		return
+
+	if j.getprop('ro.product.manufacturer').lower() != 'xiaomi':
+		banner()
+		print(color['r']+'This is not Xiaomi firmware\n'+color['n'])
+		exitk()
+		return
+	
+	if j.getprop('ro.build.display.id').lower() == 'xiaomi.eu':
+		banner()
+		print(color['r']+'Xiaomi.eu firmware and does not require patching\n'+color['n'])
+		exitk()
+		return
+
+	servicesjar = j.findf(sysdir+'/framework/services.jar')
+	if not servicesjar:
+		banner()
+		print(color['r']+'There is no services.jar\n'+color['n'])
+		exitk()
+		return
+	elif not j.greps('.*classes\.dex', j.zipl(servicesjar[0])):
+		banner()
+		print(color['r']+'You must deodex your ROM before patching\n'+color['n'])
+		exitk()
+		return
+
+	if j.existf(j.rd+'/system/init.miui.rc'):
+		miuirc = j.rd+'/system/init.miui.rc'
+	elif j.existf(j.rd+'/bootimg/ramdisk/init.miui.rc'):
+		miuirc = j.rd+'/bootimg/ramdisk/init.miui.rc'
+	else:
+		banner()
+		if not j.existd(j.rd+'/bootimg'):
+			print(color['r']+'You must unpack your boot.img in the kitchen\nbefore running this plugin\n'+color['n'])
+		else:
+			print(color['r']+'This does not seem to be a Xiaomi MIUI boot.img\n'+color['n'])
+		exitk()
+		return
+		
+	api = j.getprop('ro.build.version.sdk')
+	servicesjar = servicesjar[0]
+	buildprop = sysdir+'/build.prop'
+	patches = {
+		'services':['.method private checkSystemSelfProtection(Z)V', '    .locals 3', '', '    return-void', '.end method'], 
+		'services1':['.method static compareSignatures([Landroid/content/pm/Signature;[Landroid/content/pm/Signature;)I', '    .locals 7', '', '    const/4 v0, 0x0', '', '    return v0', '.end method'], 
+		'services2':['.method private checkSysAppCrack()Z', '    .locals 9', '', '    const/4 v0, 0x1', '', '    return v0', '.end method'], 
+		'services3':['.method private checkAppSignature([Landroid/content/pm/Signature;Ljava/lang/String;Z)Z', '    .locals 1', '', '    const/4 v0, 0x1', '', '    return v0', '.end method']
+	}
+
+	banner()
+	print(color['b']+'Patching ramdisk ...'+color['n'])
+	if os.name == 'nt':
+		j.appendf(j.cmd(j.tools+os.sep+'source'+os.sep+'superr.exe '+plugdir+'/ramdisk '+j.rd+' '+miuirc), j.rd+'/00_project_files/logs/xiaomi_ramdisk.log')
+	else:
+		if j.existf(plugdir+'/ramdisk.py'):
+			j.appendf(j.cmd(j.issudo+j.tools+'/source/ramdiskl.py '+plugdir+'/ramdisk '+j.rd+' '+miuirc), j.rd+'/00_project_files/logs/xiaomi_ramdisk.log')
+		else:
+			j.appendf(j.cmd(j.issudo+j.tools+'/source/superr --otherfile '+plugdir+'/ramdisk '+j.rd+' '+miuirc), j.rd+'/00_project_files/logs/xiaomi_ramdisk.log')
+
+	print(color['b']+'Patching build.prop ...'+color['n'])
+	if not j.getprop('ro.product.mod_device'):
+		j.appendf('ro.product.mod_device='+j.getconf('devicename', j.uconf)+'_global', buildprop)
+
+	print(color['b']+'Patching services.jar ...'+color['n'])
+	
+	j.mkdir(plugdir+'/smali')
+	
+	with j.cd(plugdir):
+		apkfile = j.basename(servicesjar)
+		j.cp(servicesjar, apkfile)
+		j.zipef(apkfile, '*classes*.dex')
+
+		if not j.existf('classes.dex'):
+			print(color['r']+'Error extracting classes'+color['n']+'\n')
+			j.delpath(apkfile, *j.findf('classes*.dex'))
+			exitk()
+			return
+		
+		reassemble = []
+		for c in j.findf('*classes*.dex'):
+			if c == 'classes.dex':
+				outdir = 'smali/smali'
+			else:
+				outdir = 'smali/smali_classes'+c[-5]
+
+			reassemble.append(outdir)
+
+			print(color['b']+'Decompiling '+c+' ...'+color['n'])
+			dodisassemble = j.cmd('java -Xmx'+get_heapsize()+'m -jar '+baksmali+' disassemble -a '+api+' '+c+' -o '+outdir)
+			if dodisassemble:
+				print('\n'+color['y']+dodisassemble+color['n']+'\n')
+				print(color['r']+'Error extracting classes\n'+color['n'])
+				j.delpath(apkfile, 'smali', *j.findf('classes*.dex'))
+				exitk()
+				return
+
+		apkdir = 'smali'
+
+		if j.existf(apkdir+'/smali/com/miui/server/SecurityManagerService.smali'):
+			mrep(apkdir+'/smali/com/miui/server/SecurityManagerService.smali', '.method private checkSystemSelfProtection(Z)V', patches['services'])
+			mrep(apkdir+'/smali/com/miui/server/SecurityManagerService.smali', '.method private checkSysAppCrack()Z', patches['services2'])
+			mrep(apkdir+'/smali/com/miui/server/SecurityManagerService.smali', '.method private checkAppSignature([Landroid/content/pm/Signature;Ljava/lang/String;Z)Z', patches['services3'])
+		
+		if j.existf(apkdir+'/smali/com/android/server/pm/PackageManagerService.smali'):
+			mrep(apkdir+'/smali/com/android/server/pm/PackageManagerService.smali', '.method static compareSignatures([Landroid/content/pm/Signature;[Landroid/content/pm/Signature;)I', patches['services1'])
+
+		for r in reassemble:
+			if r == 'smali/smali':
+				cfile = 'classes.dex'
+			else:
+				cfile = j.basename(r).split('_')[1]+'.dex'
+
+			j.delpath(cfile)
+			print(color['b']+'Compiling '+cfile+' ...'+color['n'])
+			doassemble = j.cmd('java -Xmx'+get_heapsize()+'m -jar '+smali+' assemble -a '+api+' '+r+' -o '+cfile)
+			if doassemble:
+				print('\n'+color['y']+doassemble+color['n']+'\n')
+				print(color['r']+'There was a problem compiling '+r+'\n'+color['n'])
+				j.delpath(apkfile, 'smali', *j.findf('classes*.dex'))
+				exitk()
+				return
+	
+		if not j.existf(plugdir+'/classes.dex'):
+			j.delpath(plugdir+'/smali')
+			print(color['r']+'There was a problem compiling '+apkfile+'\n'+color['n'])
+			j.delpath(apkfile, 'smali', *j.findf('classes*.dex'))
+			exitk()
+			return
+
+		print(color['b']+'Packing classes in '+apkfile+' ...'+color['n'])
+		for d in j.greps('.*classes.*\.dex', j.zipl(apkfile)):
+			j.cmd(j.aapt+' remove '+apkfile+' '+d)
+
+		j.cmd(j.aapt+' add -fk '+apkfile+' classes*.dex')
+		j.cp(apkfile, servicesjar)
+		j.delpath(apkfile, 'smali', *j.findf('classes*.dex'))
+
+		if api >= '28':
+			banner()
+			print(color['b']+'Fixing Pie boot time ...'+color['n'])
+			j.delpath(sysdir+'/bin/patchoat')
+			j.cp('patchoat', sysdir+'/bin/patchoat')
+
+	with j.cd(j.rd):
+		pacinst = j.findr('**/MiuiPackageInstaller')
+		if pacinst:
+			print(color['b']+'Removing MiuiPackageInstaller ...'+color['n'])
+			for i in pacinst:
+				j.delpath(i)
+
+	banner()
+	print(color['g']+'Patch complete.\n'+color['n'])
+
+	if 'bootimg' in miuirc or 'recoveryimg' in miuirc:
+		print(color['y']+'Don\'t forget to pack your boot.img in the kitchen\n'+color['n'])
+
+	exitk()
+	return

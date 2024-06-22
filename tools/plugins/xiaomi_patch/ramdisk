@@ -1,0 +1,95 @@
+#!/usr/bin/env python3
+
+# DO NOT EDIT unless you know what you are doing
+import os, sys, re
+
+def main(j, romdir, miuirc):
+	def forcee():
+		if ffstab == 1:
+			return
+		
+		for ff in ffstab:
+			fetmp = j.grepf(j.fl('/data', '^#'), ff)
+			fetest = j.greps('.*forceencrypt|.*forcefdeorfbe|.*fileencryption', fetmp)
+
+			fetmp = ['forceencrypt', 'forcefdeorfbe', 'fileencryption']
+			if fetest:
+				for i in fetmp:
+					if j.greps('.*'+i, fetest):
+						j.sedf(i, 'encryptable', ff)
+			
+				j.sedf(',quota', '', ff)
+			
+				if j.platf != 'win':
+					if not 'bootimg' in ff and not 'recoveryimg' in ff:
+						j.chown(ff)
+
+		return
+
+	def fstab():
+		fstdir = None
+		for i in [romdir+'/system', bootdir+'/ramdisk', romdir+'/system/vendor/etc', romdir+'/vendor/etc']:
+			if j.findf(i+os.sep+'*fstab*'):
+				fstdir = i
+				break
+		
+		if not fstdir:
+			return 1
+
+		with j.cd(fstdir):
+			ffstab1 = []
+			fstmp = j.greps(j.fl('', '.*goldfish.*|.*ranchu.*|.*charger.*|.*\.fwup|.*zram.*|.*nodata.*|.*\.fota|.*mofd_v1.*|.*\.ftm\.|.*\.sdboot|.*vold'), j.findf('*fstab*'))
+
+			for d in fstmp:
+				if os.path.islink(d):
+					fstmp.remove(d)
+
+			if len(fstmp) < 1:
+				ffstab1 = 1
+			else:
+				for i in fstmp:
+					if j.grepf(j.fl('/system', '^#'), i):
+						ffstab1.append(str(fstdir+os.sep+i))
+
+				if not ffstab1:
+					for i in fstmp:
+						if j.grepf(j.fl('/data', '^#'), i):
+							ffstab1.append(str(fstdir+os.sep+i))
+
+			return ffstab1
+	
+	bootdir = romdir+os.sep+'bootimg'
+	
+	if int(j.getprop('ro.build.version.sdk')) >= 26:
+		ffstab = fstab()
+		if ffstab and ffstab != 1:
+			fstab1 = ffstab[0]
+			forcee()
+
+	proplist = [j.dirname(miuirc)+'/default.prop', romdir+'/system/etc/prop.default', romdir+'/system/system/etc/prop.default']
+	for i in proplist:
+		if j.existf(i):
+			j.sedf('ro.secureboot.devicelock=1', 'ro.secureboot.devicelock=0', i)
+
+			if j.platf != 'win':
+				if not 'bootimg' in i and not 'recoveryimg' in i:
+					j.chown(i)
+
+	go = None
+	nrc = []
+	for line in j.readfl(miuirc):
+		if line.startswith('# secure') or go:
+			if line == '':
+				go = None
+			else:
+				go = 1
+			continue
+		
+		nrc.append(line)
+
+	j.delpath(miuirc)
+	j.appendf('\n'.join(nrc), miuirc)
+
+	if j.platf != 'win':
+		if not 'bootimg' in miuirc and not 'recoveryimg' in miuirc:
+			j.chown(miuirc)

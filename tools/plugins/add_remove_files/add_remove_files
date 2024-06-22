@@ -1,0 +1,258 @@
+#!/usr/bin/env python3
+
+# Constant variables. DO NOT EDIT unless you know what you are doing
+import os, sys
+
+def main(j, plugin):
+	def banner():
+		j.clears()
+		print()
+		print('-'.center(j.tsize, '-'))
+		print(j.intro1+"Add/Remove files".center(j.tsize)+color['n'])
+		print(j.intro2+'by SuperR'.center(j.tsize)+color['n'])
+		print('-'.center(j.tsize, '-'))
+		print()
+
+	plugdir = j.tools+os.sep+'plugins'+os.sep+plugin
+	color = j.color
+
+	if os.name == 'nt':
+		import colorama
+		colorama.init()
+	# END Constant variables
+
+	# START Script here
+	choice = ''
+	while not choice:
+		banner()
+		print("What would you like to do?\n")
+		print("1) Add all apk files from a directory into system/app")
+		print("2) Add all apk files from a directory into system/priv-app")
+		print("3) Choose apk to import into system/app")
+		print("4) Choose apk to import into system/priv-app")
+		print("5) Choose directory structure to import")
+		print("6) Delete files based on directory structure")
+		j.kprint("p = Plugin Manager", 'y')
+		j.kprint("q = Quit", 'm')
+		print()
+		print("Make your selection and press ENTER: ")
+		
+		choice = j.getChar()
+		
+		if choice.isnumeric():
+			if choice < '1' or choice > '6':
+				choice = ''
+				continue
+		elif choice not in ['q', 'p']:
+			choice = ''
+			continue
+
+		if j.sar():
+			sysdir = j.rd+'/system/system'
+		elif j.existd(j.rd+'/system/app'):
+			sysdir = j.rd+'/system'
+		else:
+			banner()
+			print(color['ryb']+j.lang['error']+color['n'])
+			print(color['r']+"There is no system/app directory to work on.\n"+color['n'])
+
+			input(j.lang['enter_exit'])
+			return
+
+		
+		appdir = 'app'
+		if choice in ['2', '4']:
+			appdir = 'priv-app'
+		
+		if choice in ['1', '2']:
+			# Add all apk files from a directory into system/app/priv-app
+			banner()
+
+			apkdir = j.pickfile(j.rd, dirr='dir')
+
+			if not apkdir:
+				banner()
+				print(color['r']+'No directory selected\n'+color['n'])
+				input(j.lang['enter_exit'])
+				return
+
+			with j.cd(apkdir):
+				if not j.findf('*.apk'):
+					banner()
+					print(color['ryb']+j.lang['error']+color['n'])
+					print(color['r']+"No apk files in the root of your selected")
+					print("directory. If the apk files are in directories,")
+					print("try the directory structure import option.\n"+color['n'])
+					
+					input(j.lang['enter_exit'])
+					return
+
+				banner()
+				print(color['b']+"Importing apk files ..."+color['n'])
+
+				api = j.getprop('ro.build.version.sdk')
+
+				if api < "19":
+					for line in j.findf('*.apk'):
+						if j.existf(sysdir+'/'+appdir+'/'+line):
+							print(color['r']+line+' already exists in system/'+appdir+'.\n'+color['y']+'Replace it?  y/n'+color['n'])
+							if j.getChar() != 'y':
+								continue
+
+						print("Adding "+line+" to system/"+appdir+" ...")
+						j.cp(line, sysdir+'/'+appdir+'/'+line)
+							
+				else:
+					for line in j.findf('*.apk'):
+						apkdir2 = line.replace('.apk', '')
+						if j.existd(sysdir+'/'+appdir+'/'+apkdir2):
+							print(color['r']+line+' already exists in system/'+appdir+'.\n'+color['y']+'Replace it?  y/n'+color['n'])
+							if j.getChar() != 'y':
+								continue
+
+						print("Adding "+line+" to system/"+appdir+" ...")
+						j.mkdir(sysdir+'/'+appdir+'/'+apkdir2)
+						j.cp(line, sysdir+'/'+appdir+'/'+apkdir2+'/'+line)
+
+				exitmess = "Apk files added to system/"+appdir
+		elif choice in ['3', '4']:
+			# Choose apk to import into system/app/priv-app
+			banner()
+			
+			apkchoose = j.pickfile(j.rd, [('apk files', '.apk')])
+
+			if not apkchoose:
+				banner()
+				print(color['ryb']+j.lang['error']+color['n'])
+				print(color['r']+"No file was selected.\n"+color['n'])
+
+				input(j.lang['enter_exit'])
+				return
+
+			apkname = j.basename(apkchoose)
+			apkdir2 = apkname.replace('.apk', '')
+			
+			if j.existf(sysdir+'/'+appdir+'/'+apkname) or j.existd(sysdir+'/'+appdir+'/'+apkdir2):
+				banner()
+				print(color['r']+apkname+' already exists.\n'+color['y']+'Replace it?  y/n'+color['n'])
+
+				if j.getChar() != 'y':
+					return
+				
+			banner()
+			print(color['b']+"Importing apk ..."+color['n'])
+
+			api = j.getprop('ro.build.version.sdk')
+
+			if api < "19":
+				j.cp(apkchoose, sysdir+'/'+appdir+'/'+apkname)
+			else:
+				j.mkdir(sysdir+'/'+appdir+'/'+apkdir2)
+				j.cp(apkchoose, sysdir+'/'+appdir+'/'+apkdir2+'/'+apkname)
+
+			exitmess = "Apk file added to system/"+appdir
+		elif choice == "5":
+			# Choose directory structure to import
+			banner()
+
+			apkdir = j.pickfile(j.rd, dirr='dir')
+
+			if not apkdir:
+				banner()
+				print(color['r']+'No directory selected\n'+color['n'])
+				input(j.lang['enter_exit'])
+				return
+			
+			if not j.existd(apkdir+'/system'):
+				banner()
+				print(color['ryb']+j.lang['error']+color['n'])
+				print(color['r']+"There is no system directory inside the")
+				print("chosen directory"+color['n'])
+
+				input(j.lang['enter_exit'])
+				return
+
+			banner()
+			print(color['yrbbo']+j.lang['warning']+'\n'+color['n'])
+			print(color['r']+"This will overwrite any files that already exist")
+			print("in your ROM.\n"+color['n'])
+			print("Would you like to continue?  y/n")
+
+			if j.getChar() != "y":
+				return
+
+			banner()
+			print(color['b']+"Importing directory ..."+color['n'])
+			with j.cd(apkdir):
+				for i in j.findr('**/*'):
+					if j.existd(i):
+						try: j.mkdir(j.rd+'/'+i)
+						except: pass
+						continue
+
+					j.cp(i, j.rd+'/'+i)
+
+			exitmess = "Directory imported"
+		elif choice == "6":
+			# Delete files based on directory structure
+			banner()
+
+			apkdir = j.pickfile(j.rd, dirr='dir')
+
+			if not apkdir:
+				banner()
+				print(color['r']+'No directory selected\n'+color['n'])
+				input(j.lang['enter_exit'])
+				return
+			
+			if not j.existd(apkdir+'/system'):
+				banner()
+				print(color['ryb']+j.lang['error']+color['n'])
+				print(color['r']+"There is no system directory inside the")
+				print("chosen directory"+color['n'])
+
+				input(j.lang['enter_exit'])
+				return
+
+			banner()
+			print(color['yrbbo']+j.lang['warning']+'\n'+color['n'])
+			print(color['r']+"This will delete files from")
+			print(color['y']+j.rd+"\n"+color['n'])
+			print("Would you like to continue?  y/n")
+
+			if j.getChar() != "y":
+				return
+			
+			banner()
+			print(color['b']+"Deleting files ..."+color['n'])
+			
+			with j.cd(apkdir):
+				dlist = []
+				for i in j.findr('**'):
+					dlist = dlist + j.findr(i)
+
+				dlist = sorted(dlist)
+
+			with j.cd(j.rd):
+				deldlist = []
+				for i in dlist:
+					if j.existd(i):
+						deldlist.append(i)
+						continue
+
+					j.delpath(i)
+
+				for i in deldlist:
+					if not j.findf(i+'/*'):
+						j.delpath(i)
+
+			exitmess = "Files based on the directory structure provided\nhave been deleted from your ROM"
+		elif choice == "p":
+			return
+		elif choice == "q":
+			sys.exit()
+
+	banner()
+	print(color['g']+exitmess+'\n'+color['n'])
+	input(j.lang['enter_exit'])
+	return

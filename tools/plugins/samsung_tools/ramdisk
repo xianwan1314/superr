@@ -1,0 +1,96 @@
+#!/usr/bin/env python3
+
+# DO NOT EDIT unless you know what you are doing
+import os, sys, re
+
+def main(j, base, romname, func, *vargs):
+	def banner():
+		j.clears()
+		print()
+		print('-'.center(tsize, '-'))
+		print(intro1+"Samsung Tools".center(tsize)+color['n'])
+		print(intro2+'by SuperR'.center(tsize)+color['n'])
+		print('-'.center(tsize, '-'))
+		print()
+
+	def samextras():
+		defprop = vargs[1]
+		prop = vargs[0]
+
+		banner()
+		j.kprint('Adding '+prop+' ...', 'b')
+		if not j.grepf('# Kernel Tweaks', defprop):
+			j.appendf('#\n# Kernel Tweaks\n#', defprop)
+
+		j.appendf(prop, defprop)
+		banner()
+		if not j.grepf(prop, defprop):
+			j.kprint('ERROR:', 'yrbbo')
+			j.kprint('Something went wrong\n', 'r')
+		else:
+			j.kprint(prop+' successful\n', 'g')
+
+		return
+
+	def fileencryption():
+		def get_fstab():
+			fstab = []
+
+			for fdir in [rd+'/bootimg/ramdisk', rd+'/vendor/etc']:
+				if not j.existd(fdir):
+					continue
+
+				with j.cd(fdir):
+					fstmp = j.greps(j.fl('', '.*goldfish.*|.*ranchu.*|.*charger.*|.*\.fwup|.*zram.*|.*nodata.*|.*\.fota|.*mofd_v1.*|.*\.ftm\.|.*\.sdboot'), j.findf('*fstab*'))
+
+					for d in fstmp:
+						if os.path.islink(d):
+							fstmp.remove(d)
+
+					if len(fstmp) < 1:
+						continue
+					else:
+						for i in fstmp:
+							if j.grepf(j.fl('/system|/data', '^#'), i):
+								fstab.append(str(fdir+os.sep+i))
+
+			return fstab
+		
+		usern = vargs[0]
+		
+		fstab = get_fstab()
+		if not fstab:
+			banner()
+			j.kprint('ERROR:', 'yrbbo')
+			j.kprint('There is no fstab in boot.img or vendor/etc\n', 'r')
+			input(j.lang['enter_continue'])
+			return
+
+		for i in fstab:
+			if 'bootimg' in i:
+				j.sedf('fileencryption', '', i)
+			elif 'vendor/etc' in i:
+				j.sedf(',fileencryption=ice', '', i)
+
+				if j.platf in ['lin', 'wsl', 'wsl2']:
+					j.cmd('chown '+usern+':'+usern+' '+i)
+
+	color = j.color
+	mconf = base+os.sep+'tools'+os.sep+'srk.conf'
+	rd = base+os.sep+'superr_'+romname
+
+	tsize = 60
+
+	if os.name == 'nt':
+		import colorama
+		colorama.init()
+		intro1 = '\033[0;34;47m'
+		intro2 = '\033[0;34;47m'
+	else:
+		intro1 = color['s']+color['bo']
+		intro2 = color['s']+color['it']
+
+	if func == 'samextras':
+		samextras()
+	elif func == 'fileencryption':
+		fileencryption()

@@ -1,0 +1,199 @@
+#!/usr/bin/env python3
+
+# Constant variables. DO NOT EDIT unless you know what you are doing
+import os, sys
+
+def main(j, plugin):
+	plugdir = os.path.join(j.tools, 'plugins', plugin)
+	color = j.color
+# END Constant variables
+
+# START Script here
+	def banner():
+		j.clears()
+		print()
+		print('-'.center(j.tsize, '-'))
+		print(j.intro1 + "LG Tools".center(j.tsize) + color['n'])
+		print(j.intro2 + 'by SuperR'.center(j.tsize) + color['n'])
+		print('-'.center(j.tsize, '-'))
+		print()
+
+	choice = ''
+	while not choice:
+		banner()
+		j.kprint('What would you like to do?\n', 'gb')
+		print('1) Unpack kdz file')
+		print('2) Remove RCTD')
+		j.kprint('p = Plugin Manager', 'y')
+		j.kprint('q = Quit', 'm')
+
+		choice = j.getChar()
+
+		if choice.isnumeric():
+			if choice < '1' or choice > '2':
+				choice = ''
+				continue
+		elif choice not in ['q', 'p']:
+			choice = ''
+			continue
+		elif choice == 'p':
+			return
+		elif choice == 'q':
+			sys.exit()
+
+		if choice == '1':
+			kdztool = plugdir+'/kdztool'
+			if j.platf == 'win':
+				kdztool = plugdir+'/kdztool.exe'
+
+			if not j.existf(kdztool):
+				with j.cd(plugdir):
+					j.dlfile('misc/kdztool_'+j.platf+'.zip', 'kdztool.zip', 1)
+
+					if not j.existf('kdztool.zip'):
+						banner()
+						j.kprint(j.lang['error'], 'yrbbo')
+						j.kprint(j.lang['tools_dl_failed']+' kdztool', 'r')
+						input(j.lang['enter_continue'])
+						choice = ''
+						continue
+
+					j.zipu('kdztool.zip')
+					j.delpath('kdztool.zip')
+
+			with j.cd(j.rd):
+				# Remove if moving to main kitchen
+				kdzlist = j.findf('*.kdz')
+				if not kdzlist:
+					banner()
+					j.kprint('There are no kdz files in this project\n', 'r')
+					input(j.lang['enter_continue'])
+					choice = ''
+					continue
+
+				if len(kdzlist) > 1:
+					romkdz = j.chlist(color['gb']+'Choose kdz file to extract:'+color['n'], kdzlist, len(kdzlist), 'plug')
+
+					if romkdz == 1:
+						return 1
+					elif romkdz == 3:
+						sys.exit()
+				else:
+					romkdz = kdzlist[0]
+
+					banner()
+					print('Do you want to extract '+color['y']+romkdz+color['n']+'?  y/n')
+					if j.getChar() != 'y':
+						choice = ''
+						continue
+				# End Remove if moving to main kitchen
+				
+				dzlist = j.cmd(kdztool+' -k '+j.rd+'/'+romkdz+' H4dEuE7ETGps6AUv unkdz.py -l')
+				dzlist = j.greps('.*.dz ', dzlist.splitlines())
+
+				if not dzlist:
+					banner()
+					j.kprint('There are no dz files in this kdz file\n', 'r')
+					input(j.lang['enter_continue'])
+					choice = ''
+					continue
+
+				banner()
+				j.kprint('Extracting ...', 'b')
+
+				dzext = []
+				for i in dzlist:
+					inum = i[:2].strip()
+					dzfile = dzlist = j.greps('.*.dz$', i.split())[0]
+
+					dzext.append(j.greps('.*.dz$', i.split())[0])
+
+					if not j.existf(dzfile):
+						j.kprint('Extracting '+dzfile+' ...', 'y')
+
+						retval = j.cmd(kdztool+' -k '+j.rd+'/'+romkdz+' H4dEuE7ETGps6AUv unkdz.py -s '+inum)
+
+				for i in dzext:
+					imglist = j.cmd(kdztool+' -k '+j.rd+'/'+i+' H4dEuE7ETGps6AUv undz.py -l')
+					imglist = j.greps('boot.img|system_1.img|system_other_1.img|vendor_1.img|product_1.img|odm_1.img|oem_1.img', imglist.splitlines())
+
+					if not imglist:
+						banner()
+						j.kprint('There are no img files in '+i+'\n', 'r')
+						continue
+
+					for x in imglist:
+						inum = x.split()[0].split('/')[0].strip()
+						if '_1.img' in x:
+							iname = '_'.join(x.split(' : ')[1].split()[0].split('_')[:-2])
+						else:
+							iname = '_'.join(x.split(' : ')[1].split()[0].split('_')[:-1])[:-4]
+
+						if not j.existf(iname+'.img'):
+							j.kprint('Extracting '+iname+' ...', 'y')
+
+							retval = j.cmd(kdztool+' -k '+j.rd+'/'+i+' H4dEuE7ETGps6AUv undz.py -s '+inum+' -n '+iname)
+
+				j.kprint('Cleaning up  ...', 'b')
+
+				for i in dzext:
+					j.delpath(i)
+
+			banner()
+			j.kprint('Complete\n', 'g')
+			input(j.lang['enter_continue'])
+
+			choice = ''
+			continue
+		elif choice == '2':
+			logfile = j.logs+'/lge_ramdisk.log'	
+			j.delpath(logfile)
+
+			lgerc = j.rd+'/bootimg/ramdisk/init.lge.rc'
+			bootpack = None
+			
+			with j.cd(j.rd):
+				if not j.existd('bootimg'):
+					if j.existf('boot.img'):
+						j.boot_unpack('boot', 'boot.img', '1')
+						bootpack = 1
+					else:
+						banner()
+						print(color['r']+'There is no boot.img in your ROM directory\n'+color['n'])
+						input(j.lang['enter_continue'])
+						choice = ''
+						continue
+				
+				if not j.existf(lgerc):
+					if bootpack:
+						with j.cd(j.bd):
+							j.appendf(j.cmd(j.rampy('boot')+'delram '+j.romname+' boot'), j.logs+'/boot.log')
+
+					banner()
+					print(color['r']+'Nothing to remove in this boot.img\n'+color['n'])
+					input(j.lang['enter_continue'])
+					choice = ''
+					continue
+
+			banner()
+			print(color['b']+'Patching ramdisk ...'+color['n'])
+			if j.platf == 'win':
+				print(j.cmd(j.tools+os.sep+'source'+os.sep+'superr.exe '+plugdir+'/ramdisk '+j.rd+' '+lgerc+' '+logfile))
+			else:
+				if j.existf(plugdir+'/ramdisk.py'):
+					print(j.cmd(j.issudo+j.tools+'/source/ramdiskl.py '+plugdir+'/ramdisk '+j.rd+' '+lgerc+' '+logfile))
+				else:
+					print(j.cmd(j.issudo+j.tools+'/source/superr --otherfile '+plugdir+'/ramdisk '+j.rd+' '+lgerc+' '+logfile))
+			
+			if bootpack:
+				j.boot_pack('boot', 'boot.img', '1')
+			
+			banner()
+			if j.grepf('patched ', logfile):
+				j.kprint('Patch complete.\n', 'g')
+			else:
+				j.kprint('Nothing to patch.\n', 'g')
+
+			input(j.lang['enter_continue'])
+			choice = ''
+			continue

@@ -1,0 +1,454 @@
+#!/usr/bin/env python3
+
+# Constant variables. DO NOT EDIT unless you know what you are doing
+import os
+import sys
+from argparse import Namespace
+
+
+def main(j, plugin):
+    plugdir = os.path.join(j.tools, 'plugins', plugin)
+    color = j.color
+# END Constant variables
+
+# START Script here
+    def banner():
+        j.clears()
+        print()
+        print('-'.center(j.tsize, '-'))
+        print(j.intro1 + "IMG Tools".center(j.tsize) + color['n'])
+        print(j.intro2 + 'by SuperR'.center(j.tsize) + color['n'])
+        print('-'.center(j.tsize, '-'))
+        print()
+
+    if int(j.superrv[1::2]) < 3220:
+        banner()
+        j.kprint('This plugin requires kitchen v3.2.2.0 or higher.\n', 'r')
+
+        if j.platf == 'win':
+            j.kprint('Try the Linux kitchen in WSL.\n', 'y')
+
+        input(j.lang['enter_continue'])
+        return
+
+    def raw2sparse():
+        with j.cd(j.rd):
+            imgfiles = []
+            for i in j.partslist:
+                if j.existf(i + '.img') and not j.sparse_chk(i + '.img'):
+                    imgfiles.append(i + '.img')
+
+                if j.existf(i + '_new.img') and not j.sparse_chk(i + '_new.img'):
+                    imgfiles.append(i + '_new.img')
+
+        if not imgfiles:
+            banner()
+            j.kprint('There are no raw img files in your project\n', 'r')
+            input(j.lang['enter_continue'])
+            return
+
+        img = j.chlist(color['gb']+'Which img file would you like to convert?'
+                       + color['n'], imgfiles, len(imgfiles), 'Plugin2')
+
+        if not img or img == 1:
+            return 1
+        elif img == 3:
+            sys.exit()
+
+        banner()
+
+        j.kprint('Converting '+img+' ...', 'b')
+
+        with j.cd(j.rd):
+            j.appendf(j.cmd(j.img2simg+' '+img+' '+img+'_2'),
+                      j.logs+'/img_build.log')
+
+            if j.existf(img) and j.existf(img+'_2'):
+                os.replace(img+'_2', img)
+
+            banner()
+            if j.sparse_chk(img):
+                j.kprint('Success\n', 'g')
+            else:
+                j.kprint(
+                    'Conversion failed. See the img_build.log for details.\n', 'g')
+
+        input(j.lang['enter_continue'])
+        return
+
+    def sparse2raw():
+        with j.cd(j.rd):
+            imgfiles = []
+            for i in j.partslist:
+                if j.existf(i + '.img') and j.sparse_chk(i + '.img'):
+                    imgfiles.append(i + '.img')
+
+                if j.existf(i + '_new.img') and j.sparse_chk(i + '_new.img'):
+                    imgfiles.append(i + '_new.img')
+
+        if not imgfiles:
+            banner()
+            j.kprint('There are no sparse img files in your project\n', 'r')
+            input(j.lang['enter_continue'])
+            return
+
+        img = j.chlist(color['gb']+'Which img file would you like to resize?'
+                       + color['n'], imgfiles, len(imgfiles), 'Plugin2')
+
+        if not img or img == 1:
+            return 1
+        elif img == 3:
+            sys.exit()
+
+        with j.cd(j.rd):
+            j.sparse_conv(img)
+
+            banner()
+            if not j.sparse_chk(img):
+                j.kprint('Success\n', 'g')
+            else:
+                j.kprint(
+                    'Conversion failed. See the img_build.log for details.\n', 'g')
+
+        input(j.lang['enter_continue'])
+        return
+
+    def resize_img():
+        resize2fs = plugdir+'/resize2fs'
+        e2fsck = plugdir+'/e2fsck'
+
+        if not j.existf(resize2fs) or not j.existf(e2fsck):
+            with j.cd(plugdir):
+                banner()
+                j.dlfile('misc/resize2fs_'+ver+'.zip', 'resize2fs.zip', 1)
+                j.dlfile('misc/e2fsck_'+ver+'.zip', 'e2fsck.zip', 1)
+
+                if not j.existf('resize2fs.zip') or not j.existf('e2fsck.zip'):
+                    banner()
+                    j.kprint(j.lang['error'], 'yrbbo')
+                    j.kprint(j.lang['tools_dl_failed']+' resize2fs', 'r')
+                    input(j.lang['enter_continue'])
+                    return
+
+                j.zipu('resize2fs.zip')
+                j.zipu('e2fsck.zip')
+                j.delpath('resize2fs.zip', 'e2fsck.zip')
+
+        with j.cd(j.rd):
+            imgfiles = []
+            for i in j.partslist:
+                if j.existf(i + '.img') and not j.sparse_chk(i + '.img'):
+                    imgfiles.append(i + '.img')
+
+                if j.existf(i + '_new.img') and not j.sparse_chk(i + '_new.img'):
+                    imgfiles.append(i + '_new.img')
+
+        if not imgfiles:
+            banner()
+            j.kprint('There are no raw img files in your project\n', 'r')
+            input(j.lang['enter_continue'])
+            return
+
+        img = j.chlist(color['gb']+'Which img file would you like to resize?'
+                       + color['n'], imgfiles, len(imgfiles), 'Plugin2')
+
+        if not img or img == 1:
+            return 1
+        elif img == 3:
+            sys.exit()
+
+        new_size = None
+        while not new_size:
+            banner()
+            print('What is the new size in MB for '+img+'?')
+            new_size = input()
+            try:
+                test_numeric = int(new_size)
+            except:
+                banner()
+                j.kprint('You can only enter a numeric size. Try again ...\n', 'r')
+                input(j.lang['enter_continue'])
+                new_size = None
+                continue
+
+            if int(new_size) >= 20480:
+                banner()
+                j.kprint(img+' will be resized to ' +
+                         str(int(new_size) / 1024)+'Gigabytes.\n', 'y')
+
+                print('Are you sure you want to continue?  y/n')
+                if j.getChar() != 'y':
+                    print('\nTry again?  y/n')
+                    if j.getChar() == 'y':
+                        new_size = None
+                        continue
+                    else:
+                        return
+
+            j.kprint('resizing '+img+' to '+new_size+'MB ...', 'b')
+
+            with j.cd(j.rd):
+                j.appendf(j.cmd(e2fsck+' -yf '+img), j.logs+'/img_tools.log')
+                retval = j.cmd(resize2fs+' '+img+' '+new_size+'M')
+                rettest = j.greps('smaller than', retval.split('\n'))
+                if rettest:
+                    rettest = j.greps('\(', rettest[0].split())
+                    if rettest:
+                        rettest = ', ' + \
+                            str(int(int(rettest[0][1:-1])
+                                * 4096 / 1024 / 1024)) + 'MB'
+
+                    banner()
+                    j.kprint(
+                        'The number you entered is larger than the estimated minimum'+(rettest or '')+'.\n', 'r')
+
+                    j.appendf(retval, j.logs+'/img_tools.log')
+
+                    print('Try again?  y/n')
+                    if j.getChar() != 'y':
+                        return
+
+                    new_size = None
+                    continue
+
+                rettest = j.greps('expressed in 32 bits', retval.split('\n'))
+                if rettest:
+                    banner()
+                    j.kprint(
+                        'The number you entered is too large for 32-bits.\nAre you sure you entered the new size in MB (megabytes)?'+'.\n', 'r')
+
+                    j.appendf(retval, j.logs+'/img_tools.log')
+
+                    print('Try again?  y/n')
+                    if j.getChar() != 'y':
+                        return
+
+                    new_size = None
+                    continue
+
+                rettest = j.greps('The filesystem is already',
+                                  retval.split('\n'))
+                if rettest:
+                    banner()
+                    j.kprint('The filesystem is already '
+                             + new_size+'MB.\n', 'y')
+
+                rettest = j.greps('Resizing the filesystem',
+                                  retval.split('\n'))
+                if rettest:
+                    banner()
+                    j.kprint('The filesystem is now '+new_size+'MB.\n', 'g')
+
+                j.appendf(retval, j.logs+'/img_tools.log')
+
+        input(j.lang['enter_continue'])
+        return
+
+    def ext4_build():
+        imglist = []
+
+        with j.cd(j.rd):
+            for i in j.findf('*'):
+                if j.existd(i):
+                    if j.existf(j.prfiles+'/fs_config-'+i) and j.existf(j.prfiles+'/file_contexts3-'+i):
+                        imglist.append(i)
+
+            whatimg = j.chlist(color['gb']+j.lang['build_img_which'] +
+                               color['n'], sorted(imglist), len(imglist), 'Plugin2')
+
+            if whatimg == 1:
+                return 1
+            elif whatimg == 3:
+                sys.exit()
+
+            if j.existf(whatimg+'_new.img'):
+                banner()
+                j.kprint(whatimg+'_new.img already exists in your project.\n', 'r')
+                print('Would you like to overwrite it?  y/n')
+                if j.getChar() != 'y':
+                    return
+
+                j.delpath(whatimg+'_new.img')
+
+            choice2 = ''
+            while not choice2:
+                banner()
+                j.kprint(j.lang['img_sparse_q']+'\n', 'ryb')
+                print('1) raw')
+                print('2) sparse')
+                print('3) '+whatimg+'.new.dat' +
+                      ('.br' if j.getconf('brotli_comp', j.mconf) else ''))
+                print('4) '+whatimg+'.img.lz4')
+                j.kprint('p = '+j.lang['menu_plugin_menu']+'\n', 'y')
+                j.kprint(j.lang['select'])
+                choice2 = j.getChar()
+
+                sparseimg = ''
+                if choice2.isnumeric():
+                    if choice2 < '1' or choice2 > '4':
+                        continue
+                elif choice2 not in ['p']:
+                    continue
+
+                if choice2 == 'b':
+                    return
+                elif choice2 != '1':
+                    sparseimg = ' -s'
+
+            j.findimgsize(whatimg)
+
+            imgname = 'fake_garbage_file'
+
+            if j.platf in ['mac'] or j.getconf('use_make_ext4fs', j.mconf) == 'Yes':
+                if j.partimg(whatimg, sparseimg, 'plug') == 1:
+                    return
+            else:
+                if j.partimg2(whatimg, sparseimg, 'plug') == 1:
+                    return
+
+            if choice2 in ['1', '2']:
+                imgname = whatimg+'_new.img'
+            elif choice2 == '3':
+                imgname = j.partsdat(whatimg, quiet=1)
+            elif choice2 == '4':
+                imgname = j.partlz4(whatimg)
+
+            banner()
+            if j.existf(imgname):
+                j.kprint(
+                    imgname+' '+j.lang['general_create']+j.romname+'\n', 'g')
+            else:
+                j.kprint(j.lang['build_img_error']+'\n', 'r')
+
+        input(j.lang['enter_continue'])
+
+        return
+
+    def ext4_info():
+        with j.cd(j.rd):
+            imgfiles = []
+            for i in j.partslist:
+                if j.existf(i + '.img') and not j.sparse_chk(i + '.img'):
+                    imgfiles.append(i + '.img')
+
+                if j.existf(i + '_new.img') and not j.sparse_chk(i + '_new.img'):
+                    imgfiles.append(i + '_new.img')
+
+        if not imgfiles:
+            banner()
+            j.kprint('There are no raw img files in your project\n', 'r')
+            input(j.lang['enter_continue'])
+            return
+
+        img = j.chlist(color['gb']+'For which img file would you like information?'
+                       + color['n'], imgfiles, len(imgfiles), 'Plugin2')
+
+        if not img or img == 1:
+            return 1
+        elif img == 3:
+            sys.exit()
+
+        banner()
+
+        j.kprint('Checking '+img+' ...', 'b')
+
+        with j.cd(j.rd):
+            superblock = j.ext4_header(img)
+
+        banner()
+        if superblock and not superblock.get('not_ext4'):
+            j.kprint(img+': Information\n', 'g')
+
+            for i in superblock:
+                tabs = '\t\t'
+                if len(i) > 14:
+                    tabs = '\t'
+
+                print(color['y'] + i + ':' + color['n']
+                      + tabs + str(superblock[i]))
+        elif superblock.get('not_ext4'):
+            j.kprint('This is not a raw ext4 img', 'r')
+        else:
+            j.kprint('Could not retrieve ext4 information', 'r')
+
+        input('\n'+j.lang['enter_continue'])
+        return
+
+    def super_info():
+        with j.cd(j.rd):
+            imgfiles = []
+            for i in ['super.img', 'super2.img', 'super.img.raw', 'super.raw',
+                      'super_new.img', 'super.img_orig']:
+                if j.existf(i) and not j.sparse_chk(i):
+                    imgfiles.append(i)
+
+        if not imgfiles:
+            banner()
+            j.kprint('There are no raw super.img files in your project\n', 'r')
+            input(j.lang['enter_continue'])
+            return
+
+        img = j.chlist(color['gb']+'For which img file would you like information?'
+                       + color['n'], imgfiles, len(imgfiles), 'Plugin2')
+
+        if not img or img == 1:
+            return 1
+        elif img == 3:
+            sys.exit()
+
+        banner()
+        args = Namespace(SUPER_IMAGE=j.rd+'/'+img, DUMP=1)
+        try:
+            j.lpunpack.LpUnpack(**vars(args)).lpdump()
+        except Exception:
+            # print(j.logtb(e)) # DELETE LATER
+            j.kprint(img+' may not be a valid super.img\n', 'r')
+
+        input('\n'+j.lang['enter_continue'])
+
+    ver = j.platf
+    if ver in ['wsl', 'wsl2']:
+        ver = 'lin'
+
+    while True:
+        j.timegt()
+
+        banner()
+        print(color['gb']+'What would you like to do?\n'+color['n'])
+
+        print('1) Convert raw img to sparse')
+        print('2) Convert sparse img to raw')
+        print('3) Resize img')
+        print('4) Build super.img')
+        print('5) Build ext4 img')
+        print('6) ext4 img information')
+        print('7) super.img information (lpdump style)')
+        j.kprint('p = Plugin Manager', 'y')
+        j.kprint('q = Quit', 'm')
+
+        choice = j.getChar()
+
+        if choice.isnumeric():
+            if choice < '1' or choice > '7':
+                continue
+        elif choice not in ['q', 'p']:
+            continue
+        elif choice == 'p':  # START Plugin Manager
+            return
+        elif choice == 'q':  # START Quit
+            sys.exit()
+
+        if choice == '1':
+            raw2sparse()
+        elif choice == '2':
+            sparse2raw()
+        elif choice == '3':
+            resize_img()
+        elif choice == '4':
+            j.super_build()
+        elif choice == '5':
+            ext4_build()
+        elif choice == '6':
+            ext4_info()
+        elif choice == '7':
+            super_info()

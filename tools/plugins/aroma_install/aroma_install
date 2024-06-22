@@ -1,0 +1,242 @@
+#!/usr/bin/env python3
+
+# Constant variables. DO NOT EDIT unless you know what you are doing
+import os, sys
+
+def main(j, plugin):
+	def banner():
+		j.clears()
+		print()
+		print('-'.center(j.tsize, '-'))
+		print(j.intro1+"Aroma Install".center(j.tsize)+color['n'])
+		print(j.intro2+'by SuperR'.center(j.tsize)+color['n'])
+		print('-'.center(j.tsize, '-'))
+		print()
+
+	plugdir = j.tools+os.sep+'plugins'+os.sep+plugin
+	color = j.color
+
+	if j.platf == 'win':
+		import colorama
+		colorama.init()
+	# END Constant variables
+	def remaroma():
+		j.delpath(j.prfiles+'/META-INF/com/google/android/updater-script')
+		j.cp(j.usdir+'/updater-script', j.prfiles+'/META-INF/com/google/android/updater-script')
+		arremove = j.grepb('#AROMA', 'set_progress', j.readfl(j.prfiles+'/META-INF/com/google/android/updater-script'))
+		j.grepvb(arremove, j.prfiles+'/META-INF/com/google/android/updater-script')
+		j.delpath(j.rd+'/META-INF')
+		j.mvdir(j.prfiles+'/META-INF', j.rd+'/META-INF')
+		j.delpath(j.prfiles+'/aroma_appupdater')
+
+	if j.existf(j.rd+'/system/build.prop'):
+		sysdir = j.rd+'/system'
+	elif j.existf(j.rd+'/system/system/build.prop'):
+		sysdir = j.rd+'/system/system'
+	else:
+		banner()
+		print(color['rb']+color['bo']+'Error:'+color['n'])
+		print(color['r']+'You must extract a ROM first.'+color['n'])
+		print()
+		input('Press ENTER to return to the kitchen')
+		return
+
+	if j.existd(j.usdir+'/aroma'):
+		banner()
+		print(color['rb']+color['bo']+'Error:'+color['n'])
+		print(color['r']+'Aroma is already installed.'+color['n'])
+		print()
+		choice = ''
+		print('Would you like to remove it?  y/n')
+		choice = j.getChar()
+		if choice == 'y':
+			remaroma()
+
+		return
+
+	with j.cd(plugdir):
+		try:
+			aromazip = j.findf('*aroma*.zip')[0]
+		except:
+			aromazip = ''
+
+		if not aromazip:
+			banner()
+			print(color['b']+'Downloading Aroma ...'+color['n'])
+			j.dlfile('https://bitbucket.org/superr/superrs-kitchen/downloads/aroma_installer-3.00b1.zip', 'aroma_installer-3.00b1.zip')
+			aromazip = 'aroma_installer-3.00b1.zip'
+			if not j.existf(aromazip):
+				print(color['rb']+color['bo']+'Error:'+color['n'])
+				print(color['r']+'Download the latest Aroma Installer zip from')
+				print('the link below and copy it into the aroma_install')
+				print('plugin directory.')
+				print()
+				print(color['y']+'http://forum.xda-developers.com/devdb/project/?id=330#downloads'+color['n'])
+				print()
+				input('Press ENTER to return to the kitchen')
+				return
+
+	if j.getconf('permtype', j.uconf) not in ['set_perm', 'set_metadata']:
+		banner()
+		print(color['rb']+color['bo']+'Error:'+color['n'])
+		print(color['r']+'You must extract ROM using set_perm or set_metadata')
+		print('to use AROMA.'+color['n'])
+		print()
+		input('Press ENTER to return to the kitchen')
+		return
+
+	if not j.existd(j.rd+'/META-INF'):
+		banner()
+		print(color['rb']+color['bo']+'Error:'+color['n'])
+		print(color['r']+'There is no META-INF in your project'+color['n'])
+		print()
+		input('Press ENTER to return to the kitchen')
+		return
+	
+	banner()
+	print(color['b']+'Setting up ...'+color['n'])
+	j.mvdir(j.rd+'/META-INF', j.prfiles+'/META-INF')
+	os.replace(plugdir+'/'+aromazip, j.rd+'/'+aromazip)
+	
+	with j.cd(j.rd):
+		j.zipu(aromazip)
+		os.replace(aromazip, plugdir+'/'+aromazip)
+	
+	deltmp = [j.rd+'/META-INF/CERT.RSA', j.rd+'/META-INF/CERT.SF',
+			j.rd+'/META-INF/MANIFEST.MF', j.usdir+'/aroma-config',
+			j.usdir+'/updater-script', j.usdir+'/update-binary-installer']
+	
+	for i in deltmp:
+		j.delpath(i)
+	
+	j.cp(plugdir+'/files/aroma-config', j.usdir+'/aroma-config')
+	j.cp(j.prfiles+'/META-INF/com/google/android/updater-script', j.usdir+'/updater-script')
+	j.cp(j.prfiles+'/META-INF/com/google/android/update-binary', j.usdir+'/update-binary-installer')
+
+	aromacount = len(j.grepf('#AROMA', j.usdir+'/updater-script'))
+	if aromacount < 1:
+		for i in ['set_perm', 'set_metadata']:
+			if j.grepf('^'+i, j.usdir+'/updater-script'):
+				j.awkadd(i, '#AROMA', 'after', 'last', j.usdir+'/updater-script')
+				break
+
+	chtmp = ['rgba', 'abgr', 'argb', 'bgra']
+	tmprep = j.chlist('Choose colorspace:', chtmp, len(chtmp), 'plug')
+	if tmprep == 1:
+		return
+	elif tmprep == 3:
+		sys.exit()
+
+	j.sedf('#COLOR', tmprep, j.usdir+'/aroma-config')
+	j.sedf('#ROMNAME', j.getconf('signature', j.uconf).replace('_', ' '), j.usdir+'/aroma-config')
+	j.sedf('#ANDROIDVERSION', j.getprop('ro.build.version.release'), j.usdir+'/aroma-config')
+	j.sedf('#ROMDEVICE', j.get_devicename(), j.usdir+'/aroma-config')
+
+	banner()
+	print('Enter ROM author:')
+	print()
+	romauthor = ''
+	while romauthor == '':
+		romauthor = input()
+	j.sedf('#ROMAUTHOR', romauthor, j.usdir+'/aroma-config')
+	j.sedf('#ROMDATE', j.timest(), j.usdir+'/aroma-config')
+
+	chtmp = ['cn.lang','de.lang','en.lang','es.lang','fr.lang','he.lang','id.lang','it.lang','ru.lang']
+	tmprep = j.chlist('Choose language:', chtmp, len(chtmp), 'plug')
+	if tmprep == 1:
+		return
+	elif tmprep == 3:
+		sys.exit()
+
+	j.sedf('#LANG', tmprep, j.usdir+'/aroma-config')
+
+	chtmp = ['franzyroy','ics','miui','miui4','touchwiz']
+	tmprep = j.chlist('Choose theme:', chtmp, len(chtmp), 'plug')
+	if tmprep == 1:
+		return
+	elif tmprep == 3:
+		sys.exit()
+
+	j.sedf('#THEME', tmprep, j.usdir+'/aroma-config')
+
+	api = j.getprop('ro.build.version.sdk')
+	
+	appslist = []
+	appslist2 = []
+	appupdater = []
+	
+	tester = 0
+	while True:
+		banner()
+		if appslist:
+			capps = []
+			for i in appslist:
+				capps.append(i.split()[2])
+			capps = ' '.join(capps)
+			print(color['b']+'CURRENT APPS: '+color['g']+capps+color['n'])
+			print()
+
+		print('Would you like to add an apk to the options?  y/n')
+		choice = j.getChar()
+		if choice != 'y':
+			break
+
+		# noinspection PyRedeclaration
+		apkchoose = j.pickfile(sysdir, [('apk files', '.apk')])
+		
+		tester = tester+1
+		
+		banner()
+		print('The name below will show in the Aroma menu.')
+		print('Type new name or press ENTER:')
+		print()
+		apkname = j.basename(apkchoose)
+		print(apkname)
+		appname = input() or apkname
+		
+		banner()
+		print(color['b']+'Adding app ...'+color['n'])
+
+		appslist.append('"item.0.'+str(tester)+'=1\\n"+     #-- '+appname)
+		appslist2.append('"'+appname+'",           "",                                                                                  1,      #-- item.0.'+str(tester)+'  = Selected by default')
+		appodex = ''
+		if api >= '21':
+			appfinal = j.dirname(apkchoose).replace(sysdir+os.sep, '')
+		else:
+			appfinal = apkchoose.replace(sysdir+os.sep, '')
+			appodex = appfinal.replace('apk','odex')
+
+		appupdater.append('if file_getprop("/tmp/aroma/mods.prop","item.0.'+str(tester)+'") == "0" then')
+
+		if api >= '21':
+			appupdater.append('    delete_recursive("/'+appfinal+'");')
+		else:
+			appupdater.append('    delete("/'+appfinal+'");')
+			appupdater.append('    delete("/'+appodex+'");')
+
+		appupdater.append('endif;')
+
+	if appslist:
+		appslist = appslist[:-1] + [appslist[-1].replace('+', '')]
+		appslist2 = appslist2[:-1] + [appslist2[-1].replace('1,', '1')]
+
+		j.awkadd('#AROMA', '\n'.join(appupdater), 'after', 'first', j.usdir+'/updater-script')
+		j.awkadd('#APPSLIST', '\n'.join(appslist), 'after', 'first', j.usdir+'/aroma-config')
+		j.awkadd('#APPLIST2', '\n'.join(appslist2), 'after', 'first', j.usdir+'/aroma-config')
+
+		j.grepvf('#APPSLIST|#APPLIST2', j.usdir+'/aroma-config')
+
+		banner()
+		print(color['g']+'Aroma is set up'+color['n'])
+		print()
+		input('Press ENTER to return to the kitchen')
+	else:
+		banner()
+		print(color['r']+'There were no apps chosen'+color['n'])
+		print()
+
+		remaroma()
+
+		input('Press ENTER to return to the kitchen')
+
+	return

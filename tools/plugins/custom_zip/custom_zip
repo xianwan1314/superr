@@ -1,0 +1,256 @@
+#!/usr/bin/env python3
+
+# Constant variables. DO NOT EDIT unless you know what you are doing
+import os, sys
+
+def main(j, plugin):
+	plugdir = os.path.join(j.tools, 'plugins', plugin)
+	color = j.color
+# END Constant variables
+
+# START Script here
+	def banner():
+		j.clears()
+		print()
+		print('-'.center(j.tsize, '-'))
+		print(j.intro1 + "Custom Zip".center(j.tsize) + color['n'])
+		print(j.intro2 + 'by SuperR'.center(j.tsize) + color['n'])
+		print('-'.center(j.tsize, '-'))
+		print()
+
+	def get_sig():
+		while True:
+			j.banner()
+			j.kprint(j.lang['sig_info'], 'b')
+			j.kprint(j.lang['sig_info2'], 'b')
+			j.kprint(j.lang['sig_info3']+'\n', 'b')
+			j.kprint(j.lang['sig_info_q']+'\n')
+			signature = input().replace(' ', '_')
+			if '/' in signature:
+				j.banner()
+				j.kprint(j.lang['sig_info_error']+'\n', 'r')
+				input(j.lang['enter_continue'])
+				continue
+			break
+
+		return signature
+
+	def get_sigcust():
+		j.banner()
+		j.kprint(j.lang['donate_sig_cust'], 'b')
+		j.kprint(j.lang['donate_sig_cust2']+'\n', 'b')
+		j.kprint(j.lang['donate_sig_q']+'\n')
+		sigcust = input()
+
+		return sigcust
+
+	def run_it(partch):
+		partname = None
+		if j.existf(deviceloc+'/superr_mmc'):
+			mmcoption = []
+			for i in j.readfl(deviceloc+'/superr_mmc'):
+				mmcoption.append(i.split()[1])
+
+			partname = j.chlist(color['gb']+'Choose existing mmc block from superr_mmc file:\n\n'+color['r']+'NOTICE: if you don\'t see the one you want,\nyou will need to add it to:\n'+color['y']+deviceloc+'/superr_mmc\n'+color['n'], mmcoption, len(mmcoption), 'plug')
+
+			if partname == 1:
+				return 1
+			elif partname == 3:
+				sys.exit()
+
+			return ['mmc', partname]
+		else:
+			partname = partch[:-4]
+
+			banner()
+			print('Type the name of the partition where '+color['y']+partch+color['n']+' should\nbe flashed or Press ENTER to accept the one listed below:')
+			print()
+			print(color['y']+partname+color['n'])
+			reply = input()
+			if reply:
+				partname = reply
+
+			return ['byname', partname]
+
+	supported = ['recovery', 'ramdisk', 'kernel', 'boot', 'system', 'vendor', 'prism', 'data', 'version', 'product', 'cust', 'oem', 'odm']
+	
+	excludes = ['00_project_files', 'META-INF', 'install', 'system', 'vendor', 'product', 'odm', 'cache', 'data']
+
+	usdir = 'META-INF'+os.sep+'com'+os.sep+'google'+os.sep+'android'
+
+	deviceloc = j.tools+os.sep+'devices'+os.sep+j.get_devicename()
+
+	with j.cd(j.rd):
+		dirs = []
+		for i in j.findf('*'):
+			if j.existd(i) and i not in excludes:
+				dirs.append(i)
+
+	if not dirs:
+		banner()
+		j.kprint('There are no custom directories in your project.\nTry creating a new directory, but avoid using these names:\n', 'r')
+		j.kprint(', '.join(excludes)+'\n', 'y')
+
+		input(j.lang['enter_continue'])
+		return
+
+	czip = j.chlist(color['gb']+'Choose directory to create zip from:'+color['n'], sorted(dirs), len(dirs), 'plugin')
+
+	if not czip or czip == 1:
+		return
+	elif czip == 3:
+		sys.exit()
+
+	j.banner()
+	j.kprint(j.lang['cust_prep'], 'b')
+
+	with j.cd(j.rd+'/'+czip):
+		excludes = ['META-INF', 'install']
+
+		dirs = []
+		files = []
+		for i in j.findf('*'):
+			if i in excludes:
+				continue
+			if j.existd(i):
+				dirs.append(i)
+			else:
+				files.append(i)
+
+		if not dirs and not files:
+			banner()
+			j.kprint('There is nothing in '+czip+'.\n', 'r')
+			input(j.lang['enter_continue'])
+			return
+
+		full_list = []
+		for i in j.findr('**/*'):
+			if os.path.isfile(i):
+				full_list.append(i)
+
+		if dirs:
+			for i in dirs:
+				if not j.existf(j.prfiles+'/fs_config-'+i) or not j.existf(j.prfiles+'/file_contexts3-'+i):
+					banner()
+					j.kprint('This plugin requires directories to have matching\nfs_config and file_contexts3 files.\n'+i+' is missing at least one of them.\n', 'r')
+					input(j.lang['enter_continue'])
+					return
+
+			config_dict = {}
+			for i in dirs:
+				config_dict[i] = j.metasetup(i)
+
+			new_meta = []
+			for i in full_list:
+				try:
+					prefix = i.split('/')[0]
+					nline = j.greps('"/'+i+'"', config_dict[prefix])[0]
+					if prefix == 'system' and j.sar():
+						nline = nline.replace('"/system', 'file_getprop("/tmp/config", "sysmnt")+"')
+					new_meta.append(nline)
+				except:
+					j.kprint(i+': '+color['r']+'Failed to find metadata', 'y')
+
+		j.cpdir(j.tools+'/updater/META-INF', 'META-INF')
+		j.cp(j.tools+'/updater/binary/update-binary-meta', usdir+'/update-binary')
+		j.cp(plugdir+'/updater-script', usdir+'/updater-script')
+		j.cpdir(j.tools+'/updater/install', 'install')
+		j.cp(j.tools+'/updater/binary/busybox-arm', 'install/bin/busybox')
+
+		if dirs:
+			j.awkadd('#PERM', '\n'.join(new_meta), 'after', 'first', usdir+'/updater-script')
+
+			for i in dirs:
+				if i == 'system':
+					j.awkadd('#MOUNT', 'ifelse(is_mounted(file_getprop("/tmp/config", "sysmnt"), "", mount("ext4", "EMMC", file_getprop("/tmp/config", "'+i+'"), file_getprop("/tmp/config", "sysmnt")));', 'after', 'all', usdir+'/updater-script')
+
+					j.awkadd('#UNMOUNT', 'ifelse(is_mounted(file_getprop("/tmp/config", "sysmnt")), unmount(file_getprop("/tmp/config", "sysmnt")));', 'after', 'all', usdir+'/updater-script')
+
+					j.awkadd('#EXTRACT', 'ui_print("Extracting '+i+'...");\nui_print(" ");\npackage_extract_dir("'+i+'", file_getprop("/tmp/config", "sysmnt"));', 'after', 'first', usdir+'/updater-script')
+				else:
+					j.awkadd('#MOUNT', 'ifelse(is_mounted("/'+i+'"), "", mount("ext4", "EMMC", file_getprop("/tmp/config", "'+i+'"), "/'+i+'"));', 'after', 'all', usdir+'/updater-script')
+
+					j.awkadd('#UNMOUNT', 'ifelse(is_mounted("/'+i+'"), unmount("/'+i+'"));', 'after', 'all', usdir+'/updater-script')
+
+					j.awkadd('#EXTRACT', 'ui_print("Extracting '+i+'...");\nui_print(" ");\npackage_extract_dir("'+i+'", file_getprop("/tmp/config", "'+i+'"));', 'after', 'first', usdir+'/updater-script')
+
+		for i in files:
+			if any([i.endswith('.img'), i.endswith('.mbn'), i.endswith('.bin'), i.endswith('.elf')]):
+				pname = i[:-4]
+				if pname in supported:
+					j.awkadd('#EXTRACT', 'ui_print("Extracting '+i+'...");\nui_print(" ");\npackage_extract_file("'+i+'", file_getprop("/tmp/config", "'+pname+'"));', 'after', 'first', usdir+'/updater-script')
+
+					if pname in supported[4:]:
+						i2 = pname
+						if pname == 'system':
+							i2 = 'sysmnt'
+
+						if not j.grepf('.*is_mounted.*'+i2, usdir+'/updater-script'):
+							if pname == 'system':
+								j.awkadd('#MOUNT', 'ifelse(is_mounted(file_getprop("/tmp/config", "sysmnt"), "", mount("ext4", "EMMC", file_getprop("/tmp/config", "sysmnt"), file_getprop("/tmp/config", "sysmnt")));', 'after', 'all', usdir+'/updater-script')
+
+								j.awkadd('#UNMOUNT', 'ifelse(is_mounted(file_getprop("/tmp/config", "sysmnt")), unmount(file_getprop("/tmp/config", "sysmnt")));', 'after', 'all', usdir+'/updater-script')
+							else:
+								j.awkadd('#MOUNT', 'ifelse(is_mounted("/'+pname+'"), "", mount("ext4", "EMMC", file_getprop("/tmp/config", "'+pname+'"), "/'+pname+'"));', 'after', 'all', usdir+'/updater-script')
+
+								j.awkadd('#UNMOUNT', 'ifelse(is_mounted("/'+pname+'"), unmount("/'+pname+'"));', 'after', 'all', usdir+'/updater-script')
+				else:
+					fullpart = run_it(i)
+					if fullpart == 1:
+						return
+
+					if fullpart[0] == 'mmc':
+						fullpart = fullpart[1]
+					else:
+						fullpart = fullpart[1]
+						if fullpart.startswith('/'):
+							fullpart = fullpart[1:]
+
+						fullpart = 'file_getprop("/tmp/config", "byname") + "/'+fullpart+'");'
+
+					j.awkadd('#EXTRACT', 'ui_print("Extracting '+i+'...");\nui_print(" ");\npackage_extract_file("'+i+'", '+fullpart, 'after', 'first', usdir+'/updater-script')
+			else:
+				j.kprint(i+': '+color['r']+'Does not seem to be a partition image.\nAccepted extensions include .img, .mbn, .bin, and .elf', 'y')
+				files.remove(i)
+
+		sig = get_sig()
+		sigcust = get_sigcust()
+
+		j.banner()
+		j.kprint(j.lang['cust_prep'], 'b')
+
+		j.sedf('#SIGNATURE', sig, usdir+'/updater-script')
+		j.sedf('#SIGCUST', sigcust, usdir+'/updater-script')
+
+		banner()
+		print('Would you like to convert your updater-script\nto an update-binary?  y/n')
+		if j.getChar() == 'y':
+			j.ubinary(usdir)
+		else:
+			for i in j.readfl(usdir+'/updater-script'):
+				if i.startswith('#'):
+					continue
+
+				j.appendf(i, usdir+'/updater-script2')
+
+			os.replace(usdir+'/updater-script2', usdir+'/updater-script')
+
+		banner()
+		j.kprint('Creating zip ...', 'b')
+
+		comp = j.getconf('rom_comp_level', j.mconf) or '5'
+		if not comp.isnumeric() or comp not in ['0', '1', '3', '5', '7', '9']:
+			comp = '5'
+
+		j.zipp(sig.replace(' ', '_')+'.zip', dirs + files + excludes, comp)
+
+		j.delpath('META-INF', 'install')
+
+		banner()
+		if j.existf(sig.replace(' ', '_')+'.zip'):
+			j.kprint(sig.replace(' ', '_')+'.zip has been created\n', 'g')
+		else:
+			j.kprint(sig.replace(' ', '_')+'.zip failed\n', 'r')
+
+	input(j.lang['enter_continue'])
+	return

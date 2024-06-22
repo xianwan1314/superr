@@ -1,0 +1,54 @@
+#!/usr/bin/env python3
+
+# DO NOT EDIT unless you know what you are doing
+import os
+
+def main(j, romdir, seinject, source, target, tclass, action):
+	tools = j.dirname(romdir)+os.sep+'tools'
+	# pluglog = romdir+'/00_project_files/logs/sepolicy_injector.log'
+
+	with j.cd(romdir):
+		sepol = j.greps(j.fl('', '.*test|.*txt|.*mapping|.*00_project_files'), j.findr('**/*sepolicy*'))
+		if sepol:
+			patchlog = []
+			for i in sepol:
+				omd5 = j.md5chk(i)
+				if i.endswith('.cil'):
+					j.appendf('(allow '+source+' '+target+' ('+tclass+' ('+action+')))', i)
+				else:
+					if ' ' in action:
+						action = ', '.join(action.split())
+					dumpf = j.cmd(seinject+' -dt -P '+i).splitlines()
+					dname = j.greps('ALLOW.*'+target+'.*', dumpf)
+					zname = j.greps('ALLOW '+source+'.*', dumpf)
+					if zname and dname:
+						znames = []
+						for z in zname:
+							line = z.split()[2]
+							if line not in znames:
+								znames.append(line)
+						dnames = []
+						for d in dname:
+							line = d.split()[4]
+							if line not in dnames:
+								dnames.append(line)
+						for z in znames:
+							for d in dnames:
+								fullcmd = j.cmd(seinject+' -s '+z+' -t '+d+' -c '+tclass+' -p '+action+' -P '+i+' -o '+i)
+								# j.appendf(fullcmd, pluglog)
+					else:
+						fullcmd = j.cmd(seinject+' -s '+source+' -t '+target+' -c '+tclass+' -p '+action+' -P '+i+' -o '+i)
+						# j.appendf(fullcmd, pluglog)
+
+				if j.md5chk(i) != omd5:
+					j.chown(i)
+					patchlog.append('patched: '+i)
+				else:
+					patchlog.append('patch failed: '+i)
+
+			if j.platf == 'win':
+				# j.appendf('\n'.join(patchlog), pluglog)
+				return '\n'.join(patchlog)
+
+			print('\n'.join(patchlog))
+			# j.chown(pluglog)

@@ -1,0 +1,721 @@
+#!/usr/bin/env python3
+
+# Constant variables. DO NOT EDIT unless you know what you are doing
+import os
+import sys
+
+
+def main(j, plugin):
+    def banner():
+        j.clears()
+        print()
+        print('-'.center(j.tsize, '-'))
+        j.kprint(j.intro1+"Samsung Tools".center(j.tsize))
+        j.kprint(j.intro2+'by SuperR'.center(j.tsize))
+        print('-'.center(j.tsize, '-'))
+        print()
+
+    plugdir = j.tools+os.sep+'plugins'+os.sep+plugin
+    color = j.color
+
+    if int(j.superrv[1::2]) < 3221:
+        banner()
+        j.kprint('This plugin requires kitchen v3.2.2.1 or higher.\n', 'r')
+
+        if j.platf == 'win':
+            j.kprint('Try the Linux kitchen in WSL, or you can use the expired', 'y')
+            j.kprint('version of this plugin in the plugin descriptions thread.\n', 'y')
+
+        input(j.lang['enter_continue'])
+        return
+
+    if j.platf == 'mac':
+        sgs4ext4fs = plugdir+'/tools/sgs4ext4fs_mac'
+    else:
+        sgs4ext4fs = plugdir+'/tools/sgs4ext4fs_lin'
+
+    md5sum = 'md5sum'
+
+    j.cmd('chmod a+x '+sgs4ext4fs)
+
+    if j.existf(plugdir+os.sep+'ramdisk.py'):
+        root_cmd = 'sudo '+j.tools+'/source/superrl.py --otherfile ' + \
+            plugdir+'/ramdisk '+j.bd+' '+j.romname
+    else:
+        root_cmd = 'sudo '+j.tools+'/source/superr --otherfile ' + \
+            plugdir+'/ramdisk '+j.bd+' '+j.romname
+
+    if j.sar():
+        sysmount = '/system/system'
+    else:
+        sysmount = '/system'
+    
+    try:
+        import readline
+    except:
+        pass
+    # END Constant variables
+
+    # START Script here
+    def deo81patch():
+        try:
+            smali = j.findf(j.tools+'/smali/current/smali*.jar')[0]
+            baksmali = j.findf(j.tools+'/smali/current/baksmali*.jar')[0]
+        except:
+            j.kprint('Could not find either smali or baksmali\n', 'r')
+            input(j.lang['enter_continue'])
+            return
+
+        if not j.existf(j.rd+sysmount+'/build.prop'):
+            banner()
+            j.kprint('There is no build.prop\n', 'r')
+            input(j.lang['enter_continue'])
+            return
+
+        if j.getprop('ro.product.manufacturer').lower() != 'samsung':
+            banner()
+            j.kprint('This is not Samsung firmware\n', 'r')
+            input(j.lang['enter_continue'])
+            return
+
+        api = j.getprop('ro.build.version.sdk')
+        if api < '27':
+            banner()
+            j.kprint('This is not Android 8.1\n', 'r')
+            input(j.lang['enter_continue'])
+            return
+
+        servicesjar = j.findf(j.rd+sysmount+'/framework/services.jar')
+        if not servicesjar:
+            banner()
+            j.kprint('There is no services.jar\n', 'r')
+            input(j.lang['enter_continue'])
+            return
+        elif not j.greps('.*classes\.dex', j.zipl(servicesjar[0])):
+            banner()
+            j.kprint('You must deodex your ROM before patching\n', 'r')
+            input(j.lang['enter_continue'])
+            return
+
+        servicesjar = servicesjar[0]
+
+        banner()
+        j.kprint('Patching services.jar ...', 'b')
+        j.mkdir(plugdir+'/smali')
+        with j.cd(plugdir):
+            apkfile = j.basename(servicesjar)
+            j.cp(servicesjar, apkfile)
+            j.zipef(apkfile, '*classes*.dex')
+
+            if not j.existf('classes.dex'):
+                j.kprint('Error extracting classes\n', 'r')
+                j.delpath(apkfile, *j.findf('classes*.dex'))
+                input(j.lang['enter_continue'])
+                return
+
+            reassemble = ['smali/smali_classes3']
+            for c in j.findf('*classes*.dex'):
+                if c == 'classes.dex':
+                    outdir = 'smali/smali'
+                else:
+                    outdir = 'smali/smali_classes'+c[-5]
+
+                reassemble.append(outdir)
+
+                j.kprint('Decompiling '+c+' ...', 'b')
+                dodisassemble = j.cmd(
+                    'java -Xmx'+j.get_heapsize()+'m -jar '+baksmali+' disassemble -a '+api+' '+c+' -o '+outdir)
+                if dodisassemble:
+                    j.kprint('\n'+dodisassemble+'\n', 'y')
+                    j.kprint('Error extracting classes\n', 'r')
+                    j.delpath(apkfile, 'smali', *j.findf('classes*.dex'))
+                    input(j.lang['enter_continue'])
+                    return
+
+            apkdir = 'smali'
+
+            j.mkdir(apkdir+'/smali_classes3/com/android/server')
+            servicefiles = j.findf(
+                apkdir+'/smali/com/android/server/SystemServer*')
+            for i in servicefiles:
+                os.replace(
+                    i, apkdir+'/smali_classes3/com/android/server/'+j.basename(i))
+
+            for r in reassemble:
+                if r == 'smali/smali':
+                    cfile = 'classes.dex'
+                else:
+                    cfile = j.basename(r).split('_')[1]+'.dex'
+
+                j.delpath(cfile)
+                j.kprint('Compiling '+cfile+' ...', 'b')
+                doassemble = j.cmd(
+                    'java -Xmx'+j.get_heapsize()+'m -jar '+smali+' assemble -a '+api+' '+r+' -o '+cfile)
+                if doassemble:
+                    j.kprint('\n'+doassemble+'\n', 'y')
+                    j.kprint('There was a problem compiling '+r+'\n', 'r')
+                    j.delpath(apkfile, 'smali', *j.findf('classes*.dex'))
+                    input(j.lang['enter_continue'])
+                    return
+
+            if not j.existf('classes3.dex'):
+                j.kprint('There was a problem compiling '+apkfile+'\n', 'r')
+                j.delpath(apkfile, 'smali', *j.findf('classes*.dex'))
+                input(j.lang['enter_continue'])
+                return
+
+            j.kprint('Packing classes in '+apkfile+' ...', 'b')
+            for d in j.greps('.*classes.*\.dex', j.zipl(apkfile)):
+                j.cmd(j.aapt+' remove '+apkfile+' '+d)
+
+            j.cmd(j.aapt+' add -fk '+apkfile+' classes*.dex')
+            j.cp(apkfile, servicesjar)
+            j.delpath(apkfile, 'smali', *j.findf('classes*.dex'))
+
+        banner()
+        j.kprint('Patch complete.', 'g')
+        input(j.lang['enter_continue'])
+        return
+
+    def omcdecoder():
+        omcdecoder = plugdir+'/tools/omc-decoder.jar'
+
+        banner()
+        if not j.existf(omcdecoder):
+            j.kprint('Downloading omc-decoder.jar ...', 'b')
+
+            jardl = 'https://github.com'+j.greps('.*omc-decoder.jar', j.internet(
+                'https://github.com/fei-ke/OmcTextDecoder/releases', 1).splitlines())[0].split('"')[1]
+
+            with j.cd(plugdir+'/tools'):
+                while not j.existf('omc-decoder.jar'):
+                    j.dlfile(jardl, 'omc-decoder.jar')
+
+        dec = 0
+        with j.cd(j.rd):
+            for i in j.findr('**/cscfeature*.xml'):
+                retval = j.cmd('java -jar '+omcdecoder+' -i '+i+' -o '+i+'-2')
+                j.appendf(retval, j.logs+'/samsung_tools.log')
+                if j.existf(i+'-2'):
+                    j.kprint('Decoded '+i+' ...', 'b')
+                    os.replace(i+'-2', i)
+                    dec += 1
+
+        banner()
+        if dec > 0:
+            j.kprint('OMC/CSC Decoded\n', 'g')
+        else:
+            j.kprint('Nothing to decode\n', 'g')
+
+        input(j.lang['enter_continue'])
+
+    def omcencoder():
+        omcdecoder = plugdir+'/tools/omc-decoder.jar'
+
+        banner()
+        if not j.existf(omcdecoder):
+            j.kprint('Downloading omc-decoder.jar ...', 'b')
+
+            jardl = 'https://github.com'+j.greps('.*omc-decoder.jar', j.internet(
+                'https://github.com/fei-ke/OmcTextDecoder/releases', 1).splitlines())[0].split('"')[1]
+
+            with j.cd(plugdir+'/tools'):
+                while not j.existf('omc-decoder.jar'):
+                    j.dlfile(jardl, 'omc-decoder.jar')
+
+        dec = 0
+        with j.cd(j.rd):
+            for i in j.findr('**/cscfeature*.xml'):
+                with open(i, 'r') as f:
+                    try:
+                        f.read(1)
+                    except:
+                        continue
+
+                retval = j.cmd('java -jar '+omcdecoder
+                               + ' -e -i '+i+' -o '+i+'-2')
+                j.appendf(retval, j.logs+'/samsung_tools.log')
+                if j.existf(i+'-2'):
+                    j.kprint('Encoded '+i+' ...', 'b')
+                    os.replace(i+'-2', i)
+                    dec += 1
+
+        banner()
+        if dec > 0:
+            j.kprint('OMC/CSC Encoded\n', 'g')
+        else:
+            j.kprint(+'Nothing to Encode\n', 'g')
+
+        input(j.lang['enter_continue'])
+
+    def samextras():
+        api = j.getprop('ro.build.version.sdk')
+        if not api:
+            banner()
+            j.kprint('ERROR:', 'yrbbo')
+            j.kprint('Please add build.prop to your rom directory', 'r')
+            print()
+            input(j.lang['enter_continue'])
+            return
+
+        defprop = None
+        for i in [j.rd+'/bootimg/ramdisk/default.prop', j.rd+sysmount+'/etc/prop.default', j.rd+'/vendor/default.prop']:
+            if j.existf(i):
+                defprop = i
+
+        if not defprop:
+            banner()
+            j.kprint('ERROR:', 'yrbbo')
+            j.kprint('default.prop not found.\nIf you are working\
+                     on Android 9 or earlier\ntry unpacking your boot.img first', 'r')
+            print()
+            input(j.lang['enter_continue'])
+            return
+
+        banner()
+        for i in ['ro.config.tima=0',
+                  'ro.config.knox=0',
+                  'ro.securestorage.knox=false',
+                  'ro.securestorage.support=false',
+                  'ro.security.mdpp.ux=Disabled',
+                  'wlan.wfd.hdcp=disabled'
+                  ]:
+            print('Would you like to add '+color['y']+i+color['n']+'?  y/n')
+
+            if j.getChar() == 'y':
+                runpy = j.cmd(root_cmd+' samextras '+i+' '+defprop)
+                print(runpy)
+
+        banner()
+        j.kprint('Finished\n', 'g')
+        input(j.lang['enter_continue'])
+        return
+
+    def imgrename2():
+        new_ext = j.getconf('img_extension', j.uconf)
+
+        retval = {}
+        
+        if new_ext:
+            with j.cd(j.rd):
+                for i in j.partslist + ['cache', 'data', 'userdata']:
+                    if j.existf(i + '_new.img'):
+                        retval[i] = [new_ext, i + '_new.img']
+                        os.replace(i + '_new.img', i + new_ext)
+                    elif j.existf(i + '.img'):
+                        retval[i] = [new_ext, i + '.img']
+                        os.replace(i + '.img', i + new_ext)
+
+        return retval
+    
+    def tar_md5():
+        def noparts():
+            banner()
+            j.kprint('Add images to your ROM directory.', 'r')
+            print()
+            input(j.lang['enter_continue'])
+
+        imgrename2()
+
+        with j.cd(j.rd):
+            parts = j.findf('*.img')+j.findf('*.mbn') + \
+                j.findf('*.ext4')+j.findf('*.bin')+j.findf('*.IMG')
+            if not parts:
+                noparts()
+                j.imgrename()
+                return
+            choice = ''
+            if j.greps('system.*', parts):
+                while not choice:
+                    banner()
+                    print('tar.md5 type:')
+                    print()
+                    print('1) All img, mbn, ext4, and bin files')
+                    print('2) Skip system, boot, and recovery')
+                    j.kprint('q = Quit', 'm')
+                    print()
+                    print('Make your selection:')
+                    choice = j.getChar()
+
+                    if choice.isnumeric():
+                        if choice < '1' or choice > '2':
+                            choice = ''
+                            continue
+                    elif choice not in ['q']:
+                        choice = ''
+                        continue
+
+                    if choice == '1':
+                        pass
+                    elif choice == '2':
+                        parts = j.greps(
+                            j.fl('', 'system|^boot.img|recovery.img'), parts)
+                        if not parts:
+                            noparts()
+                            j.imgrename()
+                            return
+                    elif choice == 'q':
+                        j.imgrename()
+                        return
+
+        banner()
+        j.kprint(' '.join(parts), 'y')
+        print()
+        print('Would you like to create a tar.md5 with the contents above?  y/n')
+        if j.getChar() != 'y':
+            j.imgrename()
+            return
+
+        parts2 = []
+        for i in parts:
+            parts2.append(i.rsplit('.', 1)[0])
+        parts2 = '_'.join(parts2)
+
+        for i in parts:
+            if i.split('.')[0] in j.partslist:
+                with j.cd(j.rd):
+                    if not j.sparse_chk(i):
+                        banner()
+                        j.kprint('ERROR:', 'yrbbo')
+                        j.kprint(i+' is not a sparse img\n', 'r')
+                        input(j.lang['enter_continue'])
+                        j.imgrename()
+                        return
+
+                    if 'exynos' in j.getprop('ro.board.platform').lower():
+                        banner()
+                        j.kprint('Converting '+i+' with sgs4ext4fs ...', 'b')
+                        j.cmd(sgs4ext4fs+' --bloat '+i+' '+i+'_32')
+                        os.replace(i+'_32', i)
+                        j.cmd('chmod 644 '+i)
+
+        banner()
+        j.kprint('Creating '+j.romname+'_'+parts2+'.tar.md5 ...', 'b')
+        with j.cd(j.rd):
+            tarc = j.cmd(j.tar+' -H ustar -c '+' '.join(parts)
+                         + ' > '+j.romname+'_'+parts2+'.tar')
+            tarm = j.cmd(md5sum+' -t '+j.romname+'_'+parts2
+                         + '.tar >> '+j.romname+'_'+parts2+'.tar')
+            j.appendf(tarc, j.logs+'/samsung_tools.log')
+            j.appendf(tarm, j.logs+'/samsung_tools.log')
+            os.rename(j.romname+'_'+parts2+'.tar',
+                      j.romname+'_'+parts2+'.tar.md5')
+
+        j.imgrename()
+
+        banner()
+        j.kprint(j.romname+'_'+parts2+'.tar.md5 has been created.\n', 'g')
+        input(j.lang['enter_continue'])
+        return
+
+    def lz4_pack():
+        with j.cd(j.rd):
+            parts = j.findf('*_new.img') + ['All *_new.img files']
+
+            if len(parts) > 1:
+                img = j.chlist(
+                    color['gb']+'Which img file would you like to pack as lz4?'+color['n'], parts, len(parts), 'plug')
+
+                if not img or img == 1:
+                    return 1
+                elif img == 3:
+                    sys.exit()
+            else:
+                banner()
+                j.kprint('Add *_new.img files to your ROM directory.', 'r')
+                print()
+                input(j.lang['enter_continue'])
+                return
+
+        if img == 'All *_new.img files':
+            parts = parts[:-1]
+        else:
+            parts = [img]
+
+        banner()
+
+        final = []
+        for i in parts:
+            i = i.replace('_new.img', '').split('.')[0].lower()
+
+            final.append(j.partlz4(i, keep=1))
+
+        banner()
+        j.kprint(', '.join(final)+' '+('have' if len(final)
+                 > 1 else 'has')+' been created.', 'g')
+        print()
+        input(j.lang['enter_continue'])
+        return
+
+    def rem_hal(full_xml, search, check_hal=None):
+        for i in j.greps('<name>.*('+search+')', full_xml):
+            if check_hal:
+                return True
+            modindex = full_xml.index(i) - 1
+            count = 0
+            for m in full_xml[modindex:]:
+                if '</hal>' in m:
+                    del full_xml[modindex:modindex+count+1]
+                    break
+                count += 1
+
+        if check_hal:
+            return False
+        else:
+            return full_xml
+
+    def multidisabler():
+        supported = {
+            'N10': 'SM-N97',
+            'S10': 'SM-G97',
+            'S20': 'SM-G98',
+            'S21': 'SM-G99'
+        }
+
+        device = None
+        for i in supported:
+            if j.getprop('ro.product.system.model').startswith(supported[i]):
+                device = i
+                break
+
+        banner()
+
+        vendorbuildprop = j.rd+'/vendor/build.prop'
+        if j.existf(vendorbuildprop):
+            print('[IN PROGRESS] modding '+vendorbuildprop)
+            if j.getconf('ro.frp.pst', vendorbuildprop):
+                j.getconf('ro.frp.pst', vendorbuildprop, add='', repl=1)
+                j.kprint('[SUCCESS] frp disabled', 'g')
+            else:
+                j.kprint('[INFO] ro.frp.pst not found in '
+                         + vendorbuildprop, 'y')
+        else:
+            j.kprint('[ERROR] '+vendorbuildprop+' not found', 'r')
+
+        fstab = j.findf(j.rd+'/vendor/etc/fstab.exynos*') + \
+            j.findf(j.rd+'/vendor/etc/fstab.qcom*')
+        if fstab:
+            fstab = fstab[0]
+
+            print('[IN PROGRESS] modding '+j.basename(fstab))
+            if j.grepf('avb', fstab):
+                j.sedf('avb,', '', fstab)
+                j.sedf('avb=vbmeta,', '', fstab)
+                j.sedf(
+                    ',avb_keys=/avb/q-gsi.avbpubkey:/avb/r-gsi.avbpubkey:/avb/s-gsi.avbpubkey', '', fstab)
+                j.kprint('[SUCCESS] avb removed', 'g')
+            else:
+                j.kprint('[INFO] avb not found in '+fstab, 'y')
+
+            if j.grepf('fileencryption=', fstab):
+                j.sedf('fileencryption=.*,', 'encryptable=ice,', fstab)
+                j.kprint('[SUCCESS] fileencrytion disabled', 'g')
+            else:
+                j.kprint('[INFO] fileencryption not found in '+fstab, 'y')
+        else:
+            j.kprint('[ERROR] No fstab found', 'r')
+
+        cass = j.rd+'/vendor/etc/init/cass.rc'
+        if j.existf(cass):
+            print('[IN PROGRESS] modding '+cass)
+            if j.grepf('start\scass', cass):
+                j.sedf('start\scass', 'stop cass', cass)
+                j.kprint('[SUCCESS] cass disabled', 'g')
+            else:
+                j.kprint('[INFO] start cass not found in '+cass, 'y')
+        else:
+            j.kprint('[ERROR] '+cass+' not found', 'r')
+
+        proca = j.rd+'/vendor/etc/init/pa_daemon_teegris.rc'
+        if j.existf(proca):
+            print('[IN PROGRESS] modding '+proca)
+            if j.grepf('start\sproca', proca):
+                j.sedf('start\sproca', 'stop proca', proca)
+                j.kprint('[SUCCESS] proca disabled', 'g')
+            else:
+                j.kprint('[INFO] start proca not found in '+proca, 'y')
+        else:
+            j.kprint('[ERROR] '+proca+' not found', 'r')
+
+        vault = j.rd+'/vendor/etc/init/vaultkeeper_common.rc'
+        if j.existf(vault):
+            modded = False
+            print('[IN PROGRESS] modding '+vault)
+            if j.grepf('start\svaultkeeper', vault):
+                j.sedf('start\svaultkeeper', 'stop vaultkeeper', vault)
+                modded = True
+            else:
+                j.kprint('[INFO] start vaultkeeper not found in '+vault, 'y')
+
+            if j.existf(j.rd+'/vendor/etc/vintf/manifest/vaultkeeper_manifest.xml'):
+                j.delpath(
+                    j.rd+'/vendor/etc/vintf/manifest/vaultkeeper_manifest.xml')
+                modded = True
+            else:
+                j.kprint(
+                    '[INFO] /vendor/etc/vintf/manifest/vaultkeeper_manifest.xml not found', 'y')
+
+            if j.existf(j.rd+'/vendor/bin/vaultkeeperd'):
+                j.delpath(j.rd+'/vendor/bin/vaultkeeperd')
+                modded = True
+            else:
+                j.kprint('[INFO] /vendor/bin/vaultkeeperd not found', 'y')
+
+            if modded:
+                j.kprint('[SUCCESS] vaultkeeper disabled', 'g')
+        else:
+            j.kprint('[ERROR] '+vault+' not found', 'r')
+
+        manifest = j.rd+'/vendor/etc/vintf/manifest.xml'
+        if j.existf(manifest):
+            print('[IN PROGRESS] modding '+manifest)
+            full = j.readfl(manifest)
+            if rem_hal(full, 'wsm|proca|securestorage', 1):
+                full = rem_hal(full, 'wsm|proca|securestorage')
+                j.delpath(manifest)
+                j.appendf('\n'.join(full), manifest)
+
+                j.kprint('[SUCCESS] proca, securestorage & wsm disabled', 'g')
+            else:
+                j.kprint('[INFO] proca, securestorage & wsm not found', 'y')
+        else:
+            j.kprint('[ERROR] '+manifest+' not found', 'r')
+
+        bluet = j.rd+sysmount+'/lib64/libbluetooth.so'
+        if j.existf(bluet):
+            bad_bytes = b'\x88\x00\x00\x34\xf3\x03\x1f\x2a\xf4\x03\x1f\x2a\x3e\x00\x00\x14'
+            good_bytes = b'\x1f\x20\x03\xd5\xf3\x03\x1f\x2a\xf4\x03\x1f\x2a\x3e\x00\x00\x14'
+
+            print('[IN PROGRESS] modding '+bluet)
+            with open(bluet, 'rb') as f, open(bluet+'_2', 'wb') as o:
+                i = f.read()
+                if bad_bytes in i:
+                    null = o.write(i.replace(bad_bytes, good_bytes))
+                    os.replace(bluet+'_2', bluet)
+                    j.kprint(
+                        '[SUCCESS] libbluetooth.so succesfully patched', 'g')
+                elif good_bytes in i:
+                    j.kprint(
+                        '[INFO] libbluetooth.so is already patched, original untouched', 'y')
+                    j.delpath(bluet+'_2')
+                else:
+                    j.kprint(
+                        '[ERROR] libbluetooth.so patch failed, original untouched', 'r')
+                    j.delpath(bluet+'_2')
+        else:
+            j.kprint('[ERROR] '+bluet+' not found', 'r')
+
+        keystore = j.rd+sysmount+'/bin/keystore'
+        if j.existf(keystore):
+            bad_bytes = b'\x4e\x00\x74\x69\x6d\x65\x73\x74\x61\x6d\x70\x00\x61\x6e\x64\x72'
+            good_bytes = b'\x4e\x00\x00\x69\x6d\x65\x73\x74\x61\x6d\x70\x00\x61\x6e\x64\x72'
+
+            print('[IN PROGRESS] modding '+keystore)
+            with open(keystore, 'rb') as f, open(keystore+'_2', 'wb') as o:
+                i = f.read()
+                if bad_bytes in i:
+                    null = o.write(i.replace(bad_bytes, good_bytes))
+                    os.replace(keystore+'_2', keystore)
+                    j.kprint('[SUCCESS] keystore succesfully patched', 'g')
+                elif good_bytes in i:
+                    j.kprint(
+                        '[INFO] keystore is already patched, original untouched', 'y')
+                    j.delpath(keystore+'_2')
+                else:
+                    j.kprint(
+                        '[ERROR] keystore patch failed, original untouched', 'r')
+                    j.delpath(keystore+'_2')
+        else:
+            j.kprint('[ERROR] '+keystore+' not found', 'r')
+
+        if device:
+            fileinit = ''
+            if device in ["S20", "S21"]:
+                fileinit = j.rd+'/prism/etc/init/init.rc'
+            elif device in ["S10", "N10"]:
+                fileinit = j.rd+'/product/etc/init/init.rc'
+
+            if j.existf(fileinit):
+                print('[IN PROGRESS] modding '+fileinit)
+                if j.grepf('start\sscs', fileinit):
+                    j.sedf('start\sscs', 'stop scs', fileinit)
+                    j.kprint('[SUCCESS] scs stopped', 'g')
+                else:
+                    j.kprint('[INFO] start scs not found in '+fileinit, 'y')
+            else:
+                j.kprint('[ERROR] '+fileinit+' not found', 'r')
+        else:
+            j.kprint(
+                '[INFO] skipping product/prism init.rc. Device not an '+', '.join(supported), 'y')
+
+        ueventd = j.rd+'/vendor/ueventd.rc'
+        if j.existf(ueventd):
+            print('[IN PROGRESS] modding '+ueventd)
+
+            ulist = j.readfl(ueventd)
+            modded = False
+
+            for x in ['# For FRP', '# Google FRP solution', '# Reactivation lock']:
+                for i in j.greps(x, ulist):
+                    modindex = ulist.index(i)
+                    if not ulist[modindex+1].startswith('#'):
+                        ulist[modindex+1] = '# '+ulist[modindex+1]
+                        modded = True
+
+            if modded:
+                j.delpath(ueventd)
+                j.appendf('\n'.join(ulist), ueventd)
+                j.kprint(
+                    '[SUCCESS] FRP and Reactivation lock have been disabled', 'g')
+            else:
+                j.kprint(
+                    '[INFO] FRP and Reactivation lock not found, original untouched', 'y')
+        else:
+            j.kprint('[ERROR] '+ueventd+' not found', 'r')
+
+        j.kprint('\nMods complete\n', 'g')
+        input(j.lang['enter_continue'])
+        return
+
+
+    while True:
+        banner()
+        j.kprint('What would you like to do?\n', 'gb')
+
+        print('1) Add tweaks to default.prop')
+        print('2) Decode OMC/CSC')
+        print('3) Encode OMC/CSC')
+        print('4) Deodex patch for Android 8.1+')
+        print('5) Create tar.md5 file')
+        print('6) Pack *_new.img files to lz4')
+        print('7) Multidisabler')
+        j.kprint('p = Plugin Manager', 'y')
+        j.kprint('q = Quit', 'm')
+
+        choice = j.getChar()
+
+        if choice.isnumeric():
+            if choice < '1' or choice > '7':
+                continue
+        elif choice not in ['q', 'p']:
+            continue
+        elif choice == 'p':  # START Plugin Manager
+            return
+        elif choice == 'q':  # START Quit
+            sys.exit()
+
+        if choice == '1':
+            samextras()
+        elif choice == '2':
+            omcdecoder()
+        elif choice == '3':
+            omcencoder()
+        elif choice == '4':
+            deo81patch()
+        elif choice == '5':
+            tar_md5()
+        elif choice == '6':
+            if lz4_pack() == 1:
+                return
+        elif choice == '7':
+            multidisabler()

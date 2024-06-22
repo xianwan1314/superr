@@ -1,0 +1,38 @@
+#!/usr/bin/env python3
+
+# DO NOT EDIT unless you know what you are doing
+import os, sys
+
+def main(j, romdir, lgerc, logfile):
+	def mrep(rcf, searchstr):
+		go = None
+		newrc = []
+		for line in j.readfl(rcf):
+			if line.startswith(searchstr) or go:
+				if not line or line == ' ':
+					go = None
+					print('patched '+searchstr.split()[1])
+					j.appendf('patched '+searchstr.split()[1], logfile)
+				else:
+					go = 1
+				
+				line = '# '+line
+			
+			newrc.append(line)
+		
+		j.delpath(rcf)
+		j.appendf('\n'.join(newrc), rcf)
+	
+	mrep(lgerc, 'service rctd ')
+	mrep(lgerc, 'service ccmd ')
+	try:
+		lgepower = j.findf(romdir+'/bootimg/ramdisk/init.*.power.rc')
+		lgepower.remove(romdir+'/bootimg/ramdisk/init.lge.power.rc')
+		lgepower = lgepower[0]
+		if lgepower:
+			mrep(lgepower, '# triton service')
+	except:
+		pass
+	
+	if j.platf != 'win':
+		j.chown(logfile)

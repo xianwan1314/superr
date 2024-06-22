@@ -1,0 +1,143 @@
+#!/usr/bin/env python3
+
+# Constant variables. DO NOT EDIT unless you know what you are doing
+import os, sys
+
+def main(j, plugin):
+    def banner():
+        j.clears()
+        print()
+        print('-'.center(j.tsize, '-'))
+        print(j.intro1+"Xperia Unpack".center(j.tsize)+color['n'])
+        print(j.intro2+'by SuperR'.center(j.tsize)+color['n'])
+        print('-'.center(j.tsize, '-'))
+        print()
+
+    plugdir = j.tools+os.sep+'plugins'+os.sep+plugin
+    color = j.color
+
+    if int(j.superrv[1::2]) < 3222:
+        banner()
+        j.kprint('This plugin requires kitchen v3.2.2.2 or higher.\n', 'r')
+
+        if j.platf == 'win':
+            j.kprint('Try the Linux kitchen in WSL.\n', 'y')
+
+        input(j.lang['enter_continue'])
+        return
+
+    if j.platf == 'mac':
+        banner()
+        j.kprint('This plugin will not currently work on Mac.\n', 'r')
+        input(j.lang['enter_exit'])
+        return
+    # END Constant variables
+
+    # START Script here
+    sinunpack = plugdir+'/tools/sinunpack'
+    j.cmd('chmod a+x '+sinunpack)
+
+    with j.cd(j.rd):
+        findextract = j.greps('\.sin$|\.ftf$|\.zip$|\.7z$', j.findf('*'))
+
+        if not findextract:
+            banner()
+            j.kprint('No files to extract in your project directory', 'r')
+            print()
+            input(j.lang['enter_exit'])
+            return
+
+        imgfile = j.chlist(color['gb']+'Choose img to extract:'+color['n'], findextract, len(findextract), 'plug')
+        
+        if imgfile == 1:
+            return 1
+        elif imgfile == 3:
+            sys.exit()
+        
+        if not imgfile:
+            banner()
+            j.kprint('Something went wrong', 'r')
+            print()
+            input(j.lang['enter_exit'])
+            return
+
+        if imgfile.endswith('zip') or imgfile.endswith('7z'):
+            banner()
+            j.kprint('Extracting '+imgfile+' ...', 'b')
+
+            if imgfile.endswith('7z'):
+                ziptest = j.zipl7(j.rd+'/'+imgfile)
+            else:
+                ziptest = j.zipl(j.rd+'/'+imgfile)
+            
+            with j.cd(j.rd):
+                zipulist = j.greps('.*.ftf|.*.sin', ziptest)
+
+                for i in zipulist:
+                    j.appendf(j.zipef(imgfile, i), j.logs+'/zip.log')
+
+                if zipulist:
+                    imgfile = j.basename(zipulist[0])
+        
+        if imgfile.endswith('ftf'):
+            banner()
+            j.kprint('Extracting '+imgfile+' ...', 'b')
+
+            with j.cd(j.rd):
+                ziptest = j.zipl(imgfile)
+                zipulist = j.greps('.*.sin', ziptest)
+
+                for i in zipulist:
+                    part_name = j.basename(i)[:-4]
+
+                    if part_name not in j.partslist + ['boot']:
+                        continue
+
+                    j.appendf(j.zipef(imgfile, i), j.logs+'/zip.log')
+
+                j.delpath(imgfile)
+                
+                if zipulist:
+                    imgfile = j.basename(zipulist[0])
+        
+        if imgfile.endswith('sin'):
+            banner()
+            j.kprint('Extracting sin files ...', 'b')
+
+            with j.cd(j.rd):
+                j.mkdir('sin_tmp')
+                for i in j.findf('*.sin'):
+                    part_name = i[:-4]
+
+                    os.replace(i, 'sin_tmp/'+i)
+
+                    with j.cd('sin_tmp'):
+                        j.appendf(j.cmd(sinunpack), j.logs+'/zip.log')
+
+                        new_files = j.findf('unpacked/*')
+
+                        if 'unpacked/'+part_name+'.img' in new_files:
+                            os.replace('unpacked/'+part_name+'.img', j.rd+'/'+part_name+'.img')
+                        elif 'unpacked/'+part_name+'.000' in new_files:
+                            os.replace('unpacked/'+part_name+'.000', j.rd+'/'+part_name+'.img')
+                        else:
+                            new_img = j.greps('.*.img', new_files)
+                            for img in new_img:
+                                os.replace(img, j.rd+'/'+part_name+'.img')
+
+                        j.delpath(*j.findf('*'))
+
+                j.delpath('sin_tmp')
+
+        if not j.existf('system.img'):
+            banner()
+            j.kprint('Firmware unpack failed', 'r')
+            print()
+            input(j.lang['enter_exit'])
+            return
+        else:
+            banner()
+            j.kprint('Firmware unpack complete', 'g')
+            print()
+            input(j.lang['enter_exit'])
+            return

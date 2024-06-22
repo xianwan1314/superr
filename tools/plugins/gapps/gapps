@@ -1,0 +1,212 @@
+#!/usr/bin/env python3
+
+# Constant variables. DO NOT EDIT unless you know what you are doing
+import os, sys
+
+def main(j, plugin):
+	def banner():
+		j.clears()
+		print()
+		print('-'.center(j.tsize, '-'))
+		print(j.intro1+"Gapps for SuperR's Kitchen".center(j.tsize)+color['n'])
+		print(j.intro2+'by SuperR'.center(j.tsize)+color['n'])
+		print('-'.center(j.tsize, '-'))
+		print()
+
+	plugdir = j.tools+os.sep+'plugins'+os.sep+plugin
+	color = j.color
+
+	if os.name == 'nt':
+		import colorama
+		colorama.init()
+	# END Constant variables
+
+	# START Script here
+	def addgapps():
+		with j.cd(j.usdir):
+			if not j.grepf('#ROOT', 'updater-script'):
+				if j.grepf('^package_extract_file', 'updater-script'):
+					j.awkadd('package_extract_file', '#ROOT', 'after', 'last', 'updater-script')
+			if not j.grepf('#GAPPS', 'updater-script'):
+				j.awkadd('#ROOT', '#GAPPS', 'before', 'last', 'updater-script')
+
+			j.awkadd('#GAPPS', j.readf(plugdir+'/files/gapps_prog'), 'after', 'first', 'updater-script')
+			j.sedf('#GAPPS1', filename, 'updater-script')
+
+	def runcheck():
+		banner()
+		print(color['b']+'Checking gapps ...'+color['n'])
+
+		gappstmp = []
+		if not j.existf(plugdir+'/gappstmp'):
+			try:
+				gappsl = j.internet('https://sourceforge.net/projects/opengapps/files/'+arch+'/', 1).splitlines()
+				gver = j.greps('.*<tr title=', gappsl)[0].split('"')[1]
+				gappsl = j.internet('https://sourceforge.net/projects/opengapps/files/'+arch+'/'+gver+'/', 1).splitlines()
+
+				for i in j.greps('.*<tr title=.*zip"', gappsl):
+					gappstmp.append(i.split('"')[1])
+
+				j.appendf('\n'.join(gappstmp), plugdir+'/gappstmp')
+			except Exception as e:
+				j.appendf(j.logtb(e), j.logs+'/'+plugin+'.log')
+		else:
+			gappstmp = j.readfl(plugdir+'/gappstmp')
+		
+		if not gappstmp:
+			banner()
+			print(color['r']+'Something went wrong. Check the '+plugin+'.log for details.\n'+color['n'])
+			input('Press ENTER to exit')
+			return 1
+
+		release = gappstmp[0].split('-')[4].replace('.zip', '')
+		filename = j.greps(aversion, j.greps(j.fl(release, '', gversion), gappstmp))
+		if filename:
+			filename = filename[0]
+
+		return [filename, release]
+
+	def rungversion():
+		gversion = ''
+		while not gversion:
+			gversion = j.chlist(color['gb']+'Choose gapps version:'+color['n'], gvtmp, len(gvtmp), 'plug')
+		
+		return gversion
+
+	gvtmp = ['aroma', 'super', 'stock', 'full', 'mini', 'micro', 'nano', 'pico', 'tvstock']
+	
+	if j.existf(j.rd+'/system/build.prop'):
+		sysdir = j.rd+'/system'
+	elif j.existf(j.rd+'/system/system/build.prop'):
+		sysdir = j.rd+'/system/system'
+	else:
+		banner()
+		print(color['y']+color['rb']+color['bo']+'ERROR:'+color['n'])
+		print(color['r']+'Extract your ROM before running this plugin'+color['n'])
+		print()
+		input('Press ENTER to return to the kitchen')
+		return
+
+	if j.existd(j.rd+'/gapps'):
+		banner()
+		print('Your ROM already has gapps, would you like to remove it?  y/n')
+		reply = j.getChar()
+		if reply == 'y':
+			j.delpath(j.rd+'/gapps')
+			j.grepvf('gapps|#GAPPS', j.usdir+'/updater-script')
+			return
+
+	filename = ''
+	aversion = j.getprop('ro.build.version.release')[0:3]
+	if len(aversion) == 1:
+		aversion = aversion+'.0'
+
+	if not aversion.replace('.','').isnumeric():
+		banner()
+		print(color['y']+color['rb']+color['bo']+'ERROR:'+color['n'])
+		print(color['r']+'There are no gapps for '+color['y']+j.getprop('ro.build.version.release')+color['n'])
+		print(color['r']+'It is probably a developer preview'+color['n'])
+		print()
+		input('Press ENTER to exit')
+		j.delpath(plugdir+'/gappstmp')
+		return
+
+	arch1 = j.getprop('ro.product.cpu.abi')
+	arch = ''
+	for i in ['arm64', 'arm', 'x86_64', 'x86']:
+		if i in arch1:
+			arch = i
+			break
+
+	release = ''
+	while not filename:
+		gversion = rungversion()
+		if gversion == 1:
+			j.delpath(plugdir + '/gappstmp')
+			return
+		elif gversion == 3:
+			j.delpath(plugdir + '/gappstmp')
+			sys.exit()
+
+		runctmp = runcheck()
+		if runctmp == 1:
+			return
+		filename = runctmp[0]
+		release = runctmp[1]
+		if not filename or not release:
+			banner()
+			print(color['yrbbo']+'ERROR:'+color['n'])
+			print(color['r']+'The selected gapps does not exist.'+color['n'])
+			print()
+			input('Press ENTER to try again')
+			continue
+
+	newarch = filename.split('-')[1]
+	newver = filename.split('-')[2]
+	exists = None
+	if j.existf(j.tools+'/gapps/'+filename):
+		exists = 1
+	elif j.findf(j.tools+'/gapps/open_gapps-'+newarch+'-'+newver+'*'):
+		with j.cd(j.tools+'/gapps'):
+			oldver = j.findf('open_gapps-'+newarch+'-'+newver+'*')
+			banner()
+			print('You have an older version/s saved.') 
+			print('Would you like to use it/them  y/n')
+			reply = j.getChar()
+			if reply == 'y':
+				if len(oldver) > 1:
+					filename = j.chlist('Which old version would you like to use?', oldver, len(oldver), 'plug')
+					if filename == 1:
+						j.delpath(plugdir + '/gappstmp')
+						return
+					elif filename == 3:
+						j.delpath(plugdir + '/gappstmp')
+						sys.exit()
+				else:
+					filename = oldver[0]
+				exists = 1
+			else:
+				print('Would you like to delete the old versions?  y/n')
+				reply = j.getChar()
+				if reply == 'y':
+					for i in oldver:
+						j.delpath(i)
+
+	if exists:
+		banner()
+		print(color['b']+'Copying '+filename+' to ROM directory ...'+color['n'])
+		j.mkdir(j.rd+'/gapps')
+		j.cp(j.tools+'/gapps/'+filename, j.rd+'/gapps/'+filename)
+		addgapps()
+	else:
+		banner()
+		print(color['b']+'Downloading gapps ...'+color['n'])
+		dlurl = 'https://sourceforge.net/projects/opengapps/files/'+arch+'/'+release+'/'+filename+'/download'
+		j.mkdir(j.rd+'/gapps')
+		with j.cd(j.rd+'/gapps'):
+			j.dlfile(dlurl, filename)
+			if j.existf(filename):
+				addgapps()
+				banner()
+				print('Would you like to keep '+filename+' for later use?  y/n')
+				reply = j.getChar()
+				if reply == 'y':
+					banner()
+					print(color['b']+'Copying '+filename+' to kitchen/tools/gapps...'+color['n'])
+					j.mkdir(j.tools+'/gapps')
+					j.cp(filename, j.tools+'/gapps/'+filename)
+			else:
+				banner()
+				print(color['y']+color['rb']+color['bo']+'ERROR:'+color['n'])
+				print(color['r']+'There was a problem.'+color['n'])
+				print()
+				input('Press ENTER to return to the kitchen')
+				return
+
+	j.delpath(plugdir+'/gappstmp')
+
+	banner()
+	print(color['g']+'Gapps has been added to your ROM'+color['n'])
+	print()
+	input('Press ENTER to continue')
+	return

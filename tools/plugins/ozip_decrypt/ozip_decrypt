@@ -1,0 +1,146 @@
+#!/usr/bin/env python3
+
+# Constant variables. DO NOT EDIT unless you know what you are doing
+import os, sys
+
+def main(j, plugin):
+	def banner():
+		j.clears()
+		print()
+		print('-'.center(j.tsize, '-'))
+		print(j.intro1+"ozip decrypt".center(j.tsize)+color['n'])
+		print(j.intro2+'by SuperR'.center(j.tsize)+color['n'])
+		print('-'.center(j.tsize, '-'))
+		print()
+
+	if os.name == 'nt':
+		import colorama
+		colorama.init()
+
+	plugdir = j.tools+os.sep+'plugins'+os.sep+plugin
+	color = j.color
+
+	if not plugdir in sys.path:
+		sys.path.insert(0, plugdir)
+	# END Constant variables
+
+	# START Script here
+	if int(j.superrv[1::2]) < 3212:
+		banner()
+		j.kprint('This plugin requires kitchen v3.2.1.2 or higher.\n', 'r')
+
+		input(j.lang['enter_plug_menu'])
+		return
+
+	with j.cd(j.rd):
+		ozip = j.findf('*.ozip')
+
+		if not ozip:
+			banner()
+			j.kprint('ozip file not found', 'r')
+
+			input(j.lang['enter_plug_menu'])
+			return
+
+		ozip = j.chlist(color['ryb']+'Which ozip?'+color['n'], ozip, len(ozip), 'plug')
+
+		if ozip == 1:
+			return 1
+		elif ozip == 3:
+			sys.exit()
+
+		zipname = ozip.replace('.ozip', '.zip')
+		
+		if j.existf(zipname):
+			banner()
+			j.kprint(zipname+' already exists.', 'r')
+			print()
+			print('Do you want to delete it and continue?  y/n')
+
+			if j.getChar() == 'y':
+				j.delpath(zipname)
+			else:
+				return
+
+		import ozipdecrypt
+
+		retval = None
+		banner()
+		j.kprint('Decrypting '+ozip+' ...', 'b')
+
+		try:
+			retval = ozipdecrypt.main(j.rd+'/'+ozip, j.logs)
+		except Exception as e:
+			j.appendf(j.logtb(e), j.logs+'/'+plugin+'.log')
+			banner()
+			j.kprint('Something went wrong. Check the '+plugin+'.log for details\n', 'r')
+
+			input(j.lang['enter_plug_menu'])
+			return
+
+		fail = None
+		if retval == 1:
+			fail = 1
+
+		if not fail and j.existf(j.rd+'/'+zipname):
+			banner()
+			j.kprint('Success\n', 'g')
+			input(j.lang['enter_plug_menu'])
+			return
+
+		if not fail and not j.findf('out/*'):
+			fail = 1
+
+		if fail:
+			j.delpath('out')
+
+			banner()
+			j.kprint('Failed\n', 'r')
+
+			input(j.lang['enter_plug_menu'])
+			return
+
+		banner()
+		j.kprint('Finished decrypting files in "out" directory.\n', 'g')
+		print('Would you like to zip the decrypted files and delete them?  y/n')
+
+		if j.getChar() != 'y':
+			movelist = j.greps('.*.new.dat.*|.*.transfer.list|boot.img|file_contexts|file_contexts.bin|dynamic_partitions_op_list', j.findf('out/*'))
+
+			back_t = 'ozip_backup_'+j.timest()
+			for i in movelist:
+				if j.existf(j.basename(i)):
+					j.mkdir(back_t)
+					os.replace(j.basename(i), back_t+'/'+j.basename(i))
+
+				os.replace(i, j.basename(i))
+
+			j.delpath(j.prfiles+'/ozip_leftovers')
+			os.replace('out', j.prfiles+'/ozip_leftovers')
+
+			banner()
+			j.kprint('Success\n', 'g')
+			print('Firmware files not used by the kitchen can be found:')
+			j.kprint('00_project_files/ozip_leftovers\n', 'y')
+
+			input(j.lang['enter_plug_menu'])
+			return
+
+		with j.cd('out'):
+			banner()
+			j.kprint('Zipping files ...', 'b')
+
+			j.zipp(zipname, j.findf('*'))
+
+		if j.existf('out/'+zipname):
+			os.replace('out/'+zipname, zipname)
+			j.delpath('out')
+
+			banner()
+			j.kprint('Success\n', 'g')
+		else:
+			banner()
+			j.kprint('Failed to zip decrypted files\n', 'r')
+
+		input(j.lang['enter_plug_menu'])
+		return

@@ -1,0 +1,171 @@
+#!/usr/bin/env python3
+
+# Constant variables. DO NOT EDIT unless you know what you are doing
+import os
+
+def main(j, plugin):
+	def banner():
+		j.clears()
+		print()
+		print('-'.center(j.tsize, '-'))
+		print(j.intro1+"sepolicy Injector".center(j.tsize)+color['n'])
+		print(j.intro2+'by SuperR'.center(j.tsize)+color['n'])
+		print('-'.center(j.tsize, '-'))
+		print()
+
+	plugdir = j.tools+os.sep+'plugins'+os.sep+plugin
+	color = j.color
+
+	if j.platf == 'win':
+		import colorama
+		colorama.init()
+
+		seinject = j.ostools+'/bootimg.exe seinject'
+	else:
+		seinject = j.ostools+'/bootimg seinject'
+	# END Constant variables
+
+	# START Script here
+	choice = None
+	while not choice:
+		banner()
+		print('What would you like to do?\n')
+		print('1) Paste a denial')
+		print('2) Read denials from 00_project_files/logcat.log')
+		j.kprint('p = Plugin Manager', 'y')
+		j.kprint('q = Quit', 'm')
+		print()
+		print('Make your selection:')
+		choice = j.getChar()
+
+		if choice.isnumeric():
+			if choice < '1' or choice > '2':
+				choice = None
+				continue
+		elif choice not in ['q', 'p']:
+			choice = None
+			continue
+
+		if choice == 'p': # START Plugin Manager
+			return
+		elif choice == 'q': # START Quit
+			sys.exit()
+
+	goall = None
+	if choice == '1':
+		banner()
+		print('Please paste the denial to be converted to an allow rule\nand Press ENTER 2 times:\n')
+		denial = []
+		while True:
+			line = input()
+			if line:
+				denial.append(line)
+			else:
+				break
+
+		if not denial:
+			banner()
+			print(color['r']+'There was a problem converting the denial.\nPlease PM the denial for evaluation.\n'+color['n'])
+			input('Press ENTER to exit')
+			return
+
+		denial = [' '.join(denial)]
+	elif choice == '2':
+		if not j.existf(j.rd+'/00_project_files/logcat.log'):
+			banner()
+			print(color['r']+'Please add your logcat.log file to 00_project_files\nand try again.\n'+color['n'])
+			input('Press ENTER to return to the kitchen')
+			return
+
+		denial = j.grepf('.*avc: denied|.*avc:  denied', j.rd+'/00_project_files/logcat.log')
+
+		if denial:
+			banner()
+			print('Would you like to allow all '+str(len(denial))+' denials?  y/n')
+			reply = j.getChar()
+			if reply == 'y': goall = 1
+		else:
+			banner()
+			print(color['r']+'There are no denials in your logcat.log\n'+color['n'])
+			input('Press ENTER to return to the kitchen')
+			return
+
+	denlist = []
+	banner()
+	for i in denial:
+		try:
+			source = j.greps('scontext=', i.split())[0].split(':')[2]
+			target = j.greps('tcontext=', i.split())[0].split(':')[2]
+			tclass = j.greps('tclass=', i.split())[0].split('=')[1]
+			action = i.split('{ ')[1].split(' }')[0]
+			final = 'allow '+source+' '+target+':'+tclass+' { '+action+' };'
+			cilform = '(allow '+source+' '+target+' ('+tclass+' ('+action+')))'
+		except Exception as e:
+			j.appendf(i, j.rd+'/00_project_files/logs/'+plugin+'.log')
+			j.appendf(j.logtb(e), j.rd+'/00_project_files/logs/'+plugin+'.log')
+
+			banner()
+			print(color['r']+'There was a problem converting the denial.\nPlease PM the denial for evaluation.\n'+color['n'])
+			input('Press ENTER to exit')
+			return
+
+		if final in denlist:
+			continue
+
+		denlist.append(final)
+
+		if len(denlist) > 1:
+			print('-'.center(j.tsize, '-'))
+			print('-'.center(j.tsize, '-'))
+		else:
+			print(color['r']+color['yb']+'NOTICE:'+color['n'])
+			print(color['r']+'Use this at your own risk\n'+color['n'])
+
+		print(color['g']+'Source Format:\n'+color['y']+final+color['n']+'\n')
+		print(color['g']+'cil Format:\n'+color['y']+cilform+color['n']+'\n')
+
+		if not goall:
+			print('Would you like to add the above rule to your sepolicy?  y/n\n')
+			reply = j.getChar()
+			if reply != 'y':
+				continue
+
+		if not j.existf(j.rd+'/bootimg/ramdisk/init.rc') and not j.sar():
+			banner()
+			print(color['y']+color['rb']+color['bo']+'ERROR:'+color['n'])
+			print(color['r']+'You must unpack your boot.img first'+color['n'])
+			print()
+			input('Press ENTER to return to the kitchen')
+			return
+
+		print(color['b']+'\nPatching: "'+final+'"'+color['n'])
+		if j.platf == 'win':
+			try:
+				fullcmd = j.cmd(j.tools+os.sep+'source'+os.sep+'superr.exe "'+plugdir+'/ramdisk" "'+j.rd+'" "'+seinject+'" "'+source+'" "'+target+'" "'+tclass+'" "'+action+'"')
+			except Exception as e:
+				j.appendf(j.logtb(e), j.rd+'/00_project_files/logs/'+plugin+'.log')
+				banner()
+				print('Something went wrong. Check the '+plugin+'.log for details\n')
+				input('Press ENTER to exit')
+				return
+		elif j.platf in ['lin', 'wsl', 'wsl2']:
+			if j.existf(plugdir+'/ramdisk.py'):
+				fullcmd = j.cmd('sudo '+j.tools+'/source/ramdiskl.py '+plugdir+'/ramdisk "'+j.rd+'" "'+seinject+'" "'+source+'" "'+target+'" "'+tclass+'" "'+action+'"')
+			else:
+				fullcmd = j.cmd('sudo '+j.tools+'/source/superr --otherfile '+plugdir+'/ramdisk "'+j.rd+'" "'+seinject+'" "'+source+'" "'+target+'" "'+tclass+'" "'+action+'"')
+		elif j.platf == 'mac':
+			if not j.existf(seinject.split()[0]):
+				banner()
+				print(color['r']+'This feature is not supported on Mac at this time.\n'+color['n'])
+				input('Press ENTER to exit')
+				return
+
+			fullcmd = j.cmd('sudo '+j.tools+'/source/superr '+plugdir+'/ramdisk "'+j.rd+'" "'+seinject+'" "'+source+'" "'+target+'" "'+tclass+'" "'+action+'"')
+
+		j.appendf('Patching: "'+final+'"', j.rd+'/00_project_files/logs/'+plugin+'.log')
+		j.appendf(fullcmd, j.rd+'/00_project_files/logs/'+plugin+'.log')
+
+		print(fullcmd)
+
+	input('\nPress ENTER to exit')
+	return

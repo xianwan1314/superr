@@ -1,0 +1,3 @@
+package_extract_dir("#MODDIR", "/tmp/#MODDIR");
+run_program("/tmp/install/bin/busybox", "unzip", "/tmp/#MODDIR/#MODINSTALL", "META-INF/com/google/android/*", "-d", "/tmp/#MODDIR");
+run_program("/tmp/install/bin/busybox", "sh", "/tmp/#MODDIR/META-INF/com/google/android/update-binary", "dummy", "1", "/tmp/#MODDIR/#MODINSTALL");

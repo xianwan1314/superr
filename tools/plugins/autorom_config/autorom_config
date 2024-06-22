@@ -1,0 +1,263 @@
+#!/usr/bin/env python3
+
+# Constant variables. DO NOT EDIT unless you know what you are doing
+import os, sys
+
+def main(j, plugin):
+	def banner():
+		j.clears()
+		print()
+		print('-'.center(j.tsize, '-'))
+		print(j.intro1+"AutoROM for SuperR's Kitchen".center(j.tsize)+color['n'])
+		print(j.intro2+'by SuperR'.center(j.tsize)+color['n'])
+		print('-'.center(j.tsize, '-'))
+		print()
+
+	plugdir = j.tools+os.sep+'plugins'+os.sep+plugin
+	color = j.color
+
+	if os.name == 'nt':
+		import colorama
+		colorama.init()
+	# END Constant variables
+
+	# START Script here
+	def getar(prop):
+		proppath = j.prfiles+'/AR-config'
+		proptest = []
+		if j.existf(proppath):
+			proptest = j.grepf(j.fl(prop, '^#'), proppath)
+			if proptest:
+				return proptest[0].strip().split('"')[1]
+			else:
+				return proptest
+
+	banner()
+	print(color['y']+'NOTE: This will delete the current config file if it exists'+color['n'])
+	print()
+	print('Would you like to create an AutoROM config file?  y/n')
+	reply = j.getChar()
+	if reply != 'y':
+		return
+
+	j.delpath(j.prfiles+'/AR-config')
+	j.cp(plugdir+'/AR-config', j.prfiles+'/AR-config')
+	with j.cd(j.prfiles):
+		choice = ''
+		while choice == '':
+			banner()
+			print('Which perm type would you like?')
+			print()
+			print('1) set_metadata')
+			print('2) set_perm')
+			print('3) sparse_dat')
+			print('4) raw_img')
+			print()
+			print('Make your selection:')
+			choice = j.getChar()
+
+			if choice < '1' or choice > '4':
+				choice = ''
+				continue
+			else:
+				j.sedf('#aperm', choice, 'AR-config')
+
+		banner()
+		print('Would you like to extract and include vendor/oem.img in your rom?  y/n')
+		reply = j.getChar()
+		if reply != 'y':
+			j.sedf('#avend', '', 'AR-config')
+		else:
+			j.sedf('#avend', 'true', 'AR-config')
+
+		banner()
+		print('Would you like to extract and include cache.img in your rom?  y/n')
+		reply = j.getChar()
+		if reply != 'y':
+			j.sedf('#acache', '', 'AR-config')
+		else:
+			j.sedf('#acache', 'true', 'AR-config')
+
+		banner()
+		print('Would you like to extract extra partitions (Samsung ONLY)?  y/n')
+		reply = j.getChar()
+		if reply != 'y':
+			j.sedf('#aextra', '', 'AR-config')
+		else:
+			j.sedf('#aextra', 'true', 'AR-config')
+
+		banner()
+		print('What is the name of your ROM?')
+		print()
+		reply = input()
+		j.sedf('#aname', reply, 'AR-config')
+
+		banner()
+		print('What is your custom signature?')
+		print()
+		reply = input()
+		j.sedf('#acsig', reply, 'AR-config')
+
+		choice = ''
+		while choice == '':
+			banner()
+			print('Which deodex type would you like?')
+			print()
+			print('  old = KitKat and below')
+			print('  l = Lollipop')
+			print('  m = Marshmallow using oat2dex')
+			print('  m2 = Marshmallow using smali/baksmali')
+			print('  n2 = Nougat/Oreo using smali/baksmali')
+			print('  o = Oreo using vdexExtractor')
+			print('  skip = DO NOT DEODEX')
+			print()
+			print('Type your selection and press ENTER:')
+			choice = input()
+
+			if choice and choice in ['old', 'l', 'm2', 'm', 'n2', 'o', 'skip']:
+				j.sedf('#adeo', choice, 'AR-config')
+			else:
+				choice = ''
+				continue
+
+		if getar('deodex_type') == 'm':
+			choice = ''
+			while choice == '':
+				banner()
+				print('What oat2dex version would you like to use?')
+				print()
+				print('1) Official v0.86')
+				print('2) Latest commit built from source')
+				print()
+				print('Make your selection:')
+				choice = j.getChar()
+
+				if choice < '1' or choice > '2':
+					choice = ''
+					continue
+				else:
+					j.sedf('#aoat', choice, 'AR-config')
+		else:
+			j.sedf('#aoat', '', 'AR-config')
+
+		if getar('deodex_type') == 'o':
+			banner()
+			print('Would you like to delete the framework directories\n(arm, arm64, etc) after deodexing?  y/n\n')
+			reply = j.getChar()
+			if reply == 'y':
+				j.sedf('#adelarch', 'yes', 'AR-config')
+			else:
+				j.sedf('#adelarch', 'no', 'AR-config')
+
+		choice = ''
+		while choice == '':
+			banner()
+			print('Which root type would you like?')
+			print()
+			print('1) SuperSU')
+			print('2) Magisk')
+			print('3) Other')
+			print('4) DO NOT ROOT')
+			print()
+			print('Make your selection:')
+			choice = j.getChar()
+
+			if choice < '1' or choice > '4':
+				choice = ''
+				continue
+			elif choice != '4':
+				j.sedf('#aroot', choice, 'AR-config')
+			else:
+				j.sedf('#aroot', '', 'AR-config')
+
+		if getar('root_add'):
+			if getar('root_add') == '1':
+				choice = ''
+				while choice == '':
+					banner()
+					print('What type of SuperSU install would you like?')
+					print()
+					print('1) Let SuperSU decide the best way to root')
+					print('2) System install (SYSTEMLESS=false)')
+					print()
+					print('Make your selection:')
+					choice = j.getChar()
+
+					if choice < '1' or choice > '2':
+						choice = ''
+						continue
+
+					j.sedf('#astype', choice, 'AR-config')
+			else:
+				j.sedf('#astype', '', 'AR-config')
+
+			banner()
+			print('Would you like to add su.d support to your rom?  y/n')
+			reply = j.getChar()
+			if reply != 'y':
+				j.sedf('#asud', '', 'AR-config')
+			else:
+				j.sedf('#asud', 'true', 'AR-config')
+
+			banner()
+			print('Would you like to add Busybox to your rom?  y/n')
+			reply = j.getChar()
+			if reply != 'y':
+				j.sedf('#abusy', '', 'AR-config')
+			else:
+				j.sedf('#abusy', 'true', 'AR-config')
+		else:
+			j.sedf('#asud', '', 'AR-config')
+			j.sedf('#abusy', '', 'AR-config')
+		
+		banner()
+		print('Would you like to remove dm-verity?  y/n')
+		reply = j.getChar()
+		if reply == 'y':
+			j.sedf('#averity', 'true', 'AR-config')
+		else:
+			j.sedf('#averity', '', 'AR-config')
+
+		banner()
+		print('Would you like to remove forceencrypt?  y/n')
+		reply = j.getChar()
+		if reply == 'y':
+			j.sedf('#aforce', 'true', 'AR-config')
+		else:
+			j.sedf('#aforce', '', 'AR-config')
+
+		banner()
+		print('Would you like to build the ROM?  y/n')
+		reply = j.getChar()
+		if reply == 'y':
+			j.sedf('#abuild', 'true', 'AR-config')
+		else:
+			j.sedf('#abuild', '', 'AR-config')
+
+		if getar('build_rom'):
+			banner()
+			print('Would you like to convert updater-script to update-binary?  y/n')
+			reply = j.getChar()
+			if reply == 'y':
+				j.sedf('#abinary', 'true', 'AR-config')
+			else:
+				j.sedf('#abinary', '', 'AR-config')
+			
+			banner()
+			print('Would you like to sign the zip?  y/n')
+			reply = j.getChar()
+			if reply == 'y':
+				j.sedf('#asign', 'true', 'AR-config')
+			else:
+				j.sedf('#asign', '', 'AR-config')
+		else:
+			j.sedf('#asign', '', 'AR-config')
+			j.sedf('#abinary', '', 'AR-config')
+
+		banner()
+		print(color['g']+'Your AutoROM config has been created.')
+		print('Extract your ROM from the main menu and')
+		print('AutoROM will start.'+color['n'])
+		print()
+		input('Press ENTER to return to the kitchen')
+		return

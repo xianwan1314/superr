@@ -1,0 +1,79 @@
+#!/usr/bin/env python3
+
+# Constant variables. DO NOT EDIT unless you know what you are doing
+import os, sys
+
+def main(j, plugin):
+	def banner():
+		j.clears()
+		print()
+		print('-'.center(j.tsize, '-'))
+		print(j.intro1+"Rockchip unpack".center(j.tsize)+color['n'])
+		print(j.intro2+'by SuperR'.center(j.tsize)+color['n'])
+		print('-'.center(j.tsize, '-'))
+		print()
+
+	plugdir = j.tools+os.sep+'plugins'+os.sep+plugin
+	color = j.color
+
+	if j.platf == 'win':
+		import colorama
+		colorama.init()
+	elif j.platf == 'mac':
+			banner()
+			print(color['r']+'This plugin will not currently work on Mac.\n')
+			input(j.lang['enter_exit'])
+			return
+	# END Constant variables
+
+	# START Script here
+	if os.name == 'nt':
+		rki = plugdir+os.sep+'tools'+os.sep+'RKImageMaker.exe'
+		afp = plugdir+os.sep+'tools'+os.sep+'AFPTool.exe'
+	else:
+		rki = plugdir+os.sep+'tools'+os.sep+'rkImageMaker'
+		afp = plugdir+os.sep+'tools'+os.sep+'afptool'
+		j.cmd('chmod a+x '+rki)
+		j.cmd('chmod a+x '+afp)
+
+	with j.cd(j.rd):
+		findextract = j.greps(j.fl('\.img$','boot.img|BOOT|recovery.img|RECOVERY'), j.findf('*'))
+
+		imgfile = j.chlist(color['gb']+'Choose img to extract:'+color['n'], findextract, len(findextract), 'plug')
+		
+		if imgfile == 1:
+			return 1
+		elif imgfile == 3:
+			sys.exit()
+		
+		if not imgfile:
+			banner()
+			print(color['r']+'No img file to extract'+color['n'])
+			print()
+			input(j.lang['enter_exit'])
+			return
+		
+		banner()
+		print(color['b']+'Extracting '+imgfile+' ...'+color['n'])
+		j.mkdir('output')
+		j.cmd(rki+' -unpack '+imgfile+' output')
+		j.cmd(afp+' -unpack output'+os.sep+'firmware.img output')
+		
+		for i in ['system.img', 'system_other.img', 'boot.img', 'kernel.img', 'vendor.img']:
+			if j.existf('output/Image/'+i):
+				os.replace('output/Image/'+i, i)
+
+		j.delpath('output')
+
+		if not j.existf('system.img'):
+			banner()
+			print(color['r']+'system.img extract failed'+color['n'])
+			print()
+			input(j.lang['enter_exit'])
+			return
+		else:
+			banner()
+			print(color['g']+'system.img extract complete'+color['n'])
+			print()
+			input(j.lang['enter_exit'])
+			return

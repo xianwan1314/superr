@@ -1,0 +1,3 @@
+package_extract_dir("gapps", "/tmp/gapps");
+run_program("/tmp/install/bin/busybox", "unzip", "/tmp/gapps/#GAPPS1", "META-INF/com/google/android/*", "-d", "/tmp/gapps");
+run_program("/tmp/install/bin/busybox", "sh", "/tmp/gapps/META-INF/com/google/android/update-binary", "dummy", "1", "/tmp/gapps/#GAPPS1");

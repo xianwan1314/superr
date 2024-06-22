@@ -1,0 +1,212 @@
+#!/usr/bin/env python3
+
+# Constant variables. DO NOT EDIT unless you know what you are doing
+import os, sys
+
+def main(j, plugin):
+	def banner() :
+		j.clears()
+		print()
+		print('-'.center(j.tsize, '-'))
+		print(j.intro1+"RUU Decryption Tool".center(j.tsize)+color['n'])
+		print(j.intro2+'by Captain_Throwback & nkk71'.center(j.tsize)+color['n'])
+		print('-'.center(j.tsize, '-'))
+		print()
+
+	plugdir = j.tools+os.sep+'plugins'+os.sep+plugin
+	color = j.color
+	texit = 'return to the kitchen'
+
+	if j.platf == 'win':
+		import colorama
+		colorama.init()
+	# END Constant variables
+
+	# START Script here
+	def no_ruu():
+		banner()
+		print(color['rb']+color['y']+'ERROR:'+color['n'])
+		print(color['r']+'There is no RUU file to work on.'+color['n'])
+		print()
+		input('Press ENTER to '+texit)
+		return
+
+	def rem_files():
+		banner()
+		print(color['rb']+color['y']+color['bo']+'NOTICE:'+color['n'])
+		print(color['r']+'Remove the files from the OUT dir and try again'+color['n'])
+		print()
+		input('Press ENTER to '+texit)
+		return
+
+	def error(msg):
+		banner()
+		print(color['rb']+color['y']+'ERROR:'+color['n'])
+		print(color['r']+msg+color['n'])
+
+	if not j.existd(plugdir+'/bin'):
+		with j.cd(plugdir):
+			if j.platf == 'win':
+				choice = None
+				while not choice:
+					banner()
+					print('Which version should we download?\n')
+					print('1) 32-bit')
+					print('2) 64-bit\n')
+					print('Make your selection:')
+					choice = j.getChar()
+
+					if choice.isnumeric():
+						if choice < '1' or choice > '2':
+							choice = None
+							continue
+					else:
+						choice = None
+						continue
+
+					if choice == '1':
+						ruudl = 'https://bitbucket.org/superr/superrs-kitchen/downloads/HTC-RUU_Decrypt_Tool_3.6.8-WINDOWS32.zip'
+					elif choice == '2':
+						ruudl = 'https://bitbucket.org/superr/superrs-kitchen/downloads/HTC-RUU_Decrypt_Tool_3.6.8-WINDOWS64.zip'
+
+				banner()
+				print(color['b']+'Downloading RUU Decrypt Tool ...'+color['n'])
+				try:
+					j.dlfile(ruudl, 'winruu.zip')
+					j.zipu('winruu.zip')
+					j.delpath('winruu.zip')
+				except Exception as e:
+					j.appendf(j.logtb(e), j.logs+'/plugin.log')
+			elif j.platf in ['lin', 'wsl', 'wsl2']:
+				banner()
+				print(color['b']+'Downloading RUU Decrypt Tool ...'+color['n'])
+				try:
+					ruudl = 'https://bitbucket.org/superr/superrs-kitchen/downloads/HTC_RUU_Decrypt_Tool_3.6.8-LINUX64.zip'
+					j.dlfile(ruudl, 'linruu.zip')
+					j.zipu('linruu.zip')
+					j.delpath('linruu.zip')
+					if j.findf('/mnt/c/*Windows*'):
+						with j.cd('bin'):
+							if not j.existf('libcurl.so.4'):
+								os.symlink('libcurl.so', 'libcurl.so.4')
+				except Exception as e:
+					j.appendf(j.logtb(e), j.logs+'/plugin.log')
+
+				for i in j.findr('bin/**')+j.findr('keyfiles/**')+['RUU_Decrypt_Tool']:
+					j.cmd('chmod a+x '+i)
+			elif j.platf == 'mac':
+				banner()
+				print(color['b']+'Downloading RUU Decrypt Tool ...'+color['n'])
+				try:
+					ruudl = 'https://bitbucket.org/superr/superrs-kitchen/downloads/HTC_RUU_Decrypt_Tool_3.0.8-MACOSX.zip'
+					j.dlfile(ruudl, 'macruu.zip')
+					j.zipu('macruu.zip')
+					j.delpath('macruu.zip')
+				except Exception as e:
+					j.appendf(j.logtb(e), j.logs+'/plugin.log')
+
+				for i in j.findr('bin/**')+j.findr('keyfiles/**')+['RUU_Decrypt_Tool']:
+					j.cmd('chmod a+x '+i)
+
+			if not j.existd('bin'):
+				error('Something went wrong with the dowload')
+				print()
+				input('Press ENTER to '+texit)
+				return
+
+	if j.platf == 'win':
+		rdecrypt = 'RUU_Decrypt_Tool.exe'
+	else:
+		rdecrypt = './RUU_Decrypt_Tool'
+
+	ruubase = ''
+	while not ruubase:
+		with j.cd(j.rd):
+			ftmp = j.findf('*.zip')+j.findf('*.exe')
+			ruubase = j.chlist(color['gb']+'Choose RUU file:', ftmp, len(ftmp), 'plug')
+			if ruubase == 1:
+				return
+			elif ruubase == 3:
+				sys.exit()
+
+			ruubase = j.rd+os.sep+ruubase
+
+	with j.cd(plugdir):
+		if not ruubase or not j.existf(ruubase):
+			no_ruu()
+		try:
+			outdir = j.findf('OUT*')[0]
+			if j.findf(outdir+os.sep+'*'):
+				banner()
+				print('There are files in your '+outdir+' dir. Should we delete them?  y/n')
+				reply = j.getChar()
+				if reply == 'y':
+					j.delpath(outdir)
+				else:
+					rem_files()
+		except:
+			pass
+
+		extparam = ''
+		if j.existf(j.rd+'/hboot.img') or j.existf(j.rd+'/hosd.img'):
+			banner()
+			print('Would you like to make a keyfile?  y/n')
+			reply = j.getChar()
+			if reply == 'y':
+				if not j.existf(j.rd+'/hboot.img') == 0 and not j.existf(j.rd+'/hosd.img'):
+					j.cp(j.rd+'/hboot.img', 'hboot.img')
+					extparam = ' hboot.img'
+				elif not j.existf(j.rd+'/hboot.img') and not j.existf(j.rd+'/hosd.img') == 0:
+					j.cp(j.rd+'/hosd.img', 'hosd.img')
+					extparam = ' hosd.img'
+				elif j.existf(j.rd+'/hboot.img') and j.existf(j.rd+'/hosd.img'):
+					choice = ''
+					while choice == '':
+						banner()
+						print('Which img would you like to use?')
+						print()
+						print('1) hboot.img')
+						print('2) hosd.img')
+						print()
+						print('Make your selection:')
+						choice = j.getChar()
+
+						if choice < '1' or choice > '2':
+							choice = ''
+							continue
+						elif choice == '1':
+							extparam = ' hboot.img'
+						elif choice == '2':
+							extparam = ' hosd.img'
+
+		banner()
+		os.replace(ruubase, j.basename(ruubase))
+		os.system(rdecrypt+' -sf '+j.basename(ruubase)+extparam)
+		os.replace(j.basename(ruubase), ruubase)
+		outdir = j.findf('OUT*')[0]
+
+		imglist = ['system.img', 'system_other.img', 'boot.img', 'vendor.img', 'recovery_signed.img']
+		with j.cd(outdir):
+			errfiles = []
+			for i in imglist:
+				imglist2 = j.findr('**/'+i)
+				for n in imglist2:
+					if j.existf(n):
+						os.replace(n, j.rd+'/'+j.basename(n))
+					else:
+						errfiles.append(j.basename(n))
+		
+		j.delpath(outdir, 'hboot.img', 'hosd.img')
+		if j.existf(j.rd+'/recovery_signed.img'):
+			os.replace(j.rd+'/recovery_signed.img', j.rd+'/recovery.img')
+
+		if j.greps('system|boot', errfiles):
+			error('Either system.img or boot.img was not extracted')
+		else:
+			banner()
+			print(color['g']+'You can extract the new system.img from the Main menu'+color['n'])
+
+
+	print()
+	input('Press ENTER to '+texit)
+	return
