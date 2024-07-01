@@ -3123,7 +3123,6 @@ def getconf(conf, version, rem=None, add=None, repl=None, l=None):
                 full = sorted(readfl(version) + [conf + '=' + ' '.join(add)])
             else:
                 full = sorted(readfl(version) + [conf + '=' + add])
-
             delpath(version)
             appendf('\n'.join(full), version)
         return
@@ -3146,7 +3145,7 @@ def getconf(conf, version, rem=None, add=None, repl=None, l=None):
                 return []
         else:
             try:
-                return grepf('^' + conf + '=', version)[0].split('=', 1)[1]
+                return grepf(f'^{conf}=', version)[0].split('=', 1)[1]
             except:
                 return ''
 
@@ -4027,7 +4026,7 @@ def mfunc2(data, dtype):
 
 def mkdir(dirpath):
     if not os.path.isdir(dirpath):
-        os.makedirs(dirpath)
+        os.makedirs(dirpath, exist_ok=True)
 
 
 def mvdir(src_dir, dst_dir):
@@ -4240,7 +4239,6 @@ def partimg2(whatimg, sparseimg=None, fromplug=None, frommenu=None, quiet=None):
         build_args = ['-j', '0']
 
         if existf(whatimg + '.img'):
-            superblock = {}
             try:
                 superblock = ext4_header(whatimg + '.img')
             except:
@@ -4474,30 +4472,6 @@ def partsdat(whatimg, quiet=None):
             return whatimg + '.new.dat'
 
 
-def pickfile(sdir, ftype=None, mul=None, dirr=None):
-    import tkinter as tk
-    from tkinter import filedialog
-
-    if dirr:
-        options = {'initialdir': sdir, 'title': 'Choose a directory:'}
-    else:
-        options = {'initialdir': sdir, 'title': 'Choose a file:'}
-
-    if ftype:
-        options['filetypes'] = ftype
-
-    root = tk.Tk()
-    root.withdraw()
-
-    if mul:
-        return list(filedialog.askopenfilenames(**options))
-    else:
-        if dirr:
-            return filedialog.askdirectory(**options)
-        else:
-            return filedialog.askopenfilename(**options)
-
-
 def plat():
     if existd('/mnt/c'):
         if which('wsl.exe'):
@@ -4601,7 +4575,7 @@ def plug_update(plugins, getlist=None, quiet=None):
         if i not in pluglist[0]:
             continue
 
-        if not existf(tools + '/plugins/' + i + '/plugmd5'):
+        if not existf(tools + f'/plugins/{i}/plugmd5'):
             if quiet:
                 upplugs.append(i)
             else:
@@ -4616,7 +4590,7 @@ def plug_update(plugins, getlist=None, quiet=None):
 
             continue
 
-        if readf(tools + '/plugins/' + i + '/plugmd5') != pluglist[1][i]:
+        if readf(tools + f'/plugins/{i}/plugmd5') != pluglist[1][i]:
             upplugs.append(i)
 
     if upplugs:
@@ -4643,15 +4617,10 @@ def plug_update(plugins, getlist=None, quiet=None):
                 delpath(i + '.zip')
 
 
-def rampy(filetype=None):
+def rampy():
     issudo3 = issudo2 or 'sudo '
 
     return issudo3 + tools_local + f'startup.py --mainram {bd} '
-
-
-def randm():
-    from random import randint
-    return randint(1000, 9999)
 
 
 def readf(filename):
@@ -5230,25 +5199,7 @@ def timegt(short=None):
                 else:
                     sys.exit()
 
-        if offline_auth == 'enabled':
-            if start_date > datetime.strptime(days_left, date_pattern):
-                delpath(tools + '/auth.key')
 
-                while True:
-                    banner()
-                    kprint(lang['auth_expired'] + '\n', 'r')
-                    print('1) ' + lang['menu_renew_now'])
-                    kprint('q = ' + lang['menu_quit'] + '\n', 'm')
-                    print(lang['select'])
-                    reply = getChar()
-
-                    if reply not in ['1', 'q']:
-                        continue
-
-                    if reply == '1':
-                        sys.exit(3)
-                    else:
-                        sys.exit()
 
     last_used = start_date
 
@@ -5612,4 +5563,4 @@ vdexext = ostools + '/vdexExtractor'
 brotli = ostools + '/brotli'
 superp = ostools + '/superp'
 last_used = datetime.now()
-offline_auth = getconf('offline_auth', mconf)
+
